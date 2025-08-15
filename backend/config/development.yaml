@@ -1,0 +1,20 @@
+cors:
+  origins:
+  - http://localhost:3000
+  - http://127.0.0.1:3000
+  - http://localhost:5173
+database:
+  url: sqlite:///vo_benchmark_dev.db
+logging:
+  level: DEBUG
+  requests: true
+redis:
+  url: redis://localhost:6379/0
+server:
+  debug: true
+  host: 0.0.0.0
+  port: 5000
+storage:
+  # 团队统一的绝对路径（请按需调整到团队标准路径）
+  results_root: C:/Users/jyj20/Desktop/VO/vo-benchmark/backend/results
+

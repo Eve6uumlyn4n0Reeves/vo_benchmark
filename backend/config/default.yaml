@@ -1,0 +1,39 @@
+environment: development
+debug: true
+host: 0.0.0.0
+port: 5000
+
+cors:
+  origins:
+    - "*"
+  allow_credentials: true
+
+storage:
+  datasets_root: "/data/datasets"
+  results_root: "/data/results"
+  temp_root: "/tmp/vo_benchmark"
+
+experiment:
+  default_num_runs: 1
+  default_parallel_jobs: 4
+  default_max_features: 5000
+  default_ransac_threshold: 1.0
+  default_ransac_confidence: 0.999
+  default_ransac_max_iters: 2000
+  default_ratio_threshold: 0.75
+  post_filter:
+    enabled: true
+    gms:
+      with_rotation: false
+      with_scale: false
+      threshold_factor: 6
+    symmetric_mad:
+      mad_k: 3.0
+
+  supported_feature_types: ["SIFT", "ORB", "AKAZE", "BRISK", "KAZE", "SURF"]
+  supported_ransac_types: ["STANDARD", "PROSAC", "USAC_DEFAULT", "USAC_MAGSAC", "USAC_ACCURATE", "RHO", "LMEDS"]
+
+logging:
+  level: INFO
+  to_stdout: true
+# Default configuration

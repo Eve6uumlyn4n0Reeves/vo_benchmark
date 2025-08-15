@@ -1,0 +1,16 @@
+# 实验输出目录
+# 此目录用于存储所有实验的输出结果
+# 每个实验会在此目录下创建独立的子目录
+
+# 目录结构示例:
+# experiments/
+# ├── sift_orb_comparison_20250807_123456/
+# │   ├── results/
+# │   ├── logs/
+# │   ├── config/
+# │   └── ...
+# └── feature_evaluation_20250807_234567/
+#     ├── results/
+#     ├── logs/
+#     ├── config/
+#     └── ...
