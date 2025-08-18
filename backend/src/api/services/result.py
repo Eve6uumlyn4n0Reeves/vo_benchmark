@@ -480,8 +480,24 @@ class ResultService:
                 self._pr_cache[cache_key] = (processed, time.time())
                 return processed
 
-            # 2. 如果没有预计算结果，现算（向后兼容）
-            logger.info(f"预计算PR曲线不存在，开始现算: {experiment_id}/{algorithm_key}")
+            # 2. 严格模式：不允许现算，返回 computing 状态提示实验未完成
+            try:
+                from src.config.manager import get_config
+                strict = bool(get_config().experiment.get('strict_precompute', True))
+                allow_on_demand = bool(get_config().experiment.chart_config.pr_curve.get('allow_on_demand_compute', False))
+            except Exception:
+                strict = True
+                allow_on_demand = False
+
+            if strict and not allow_on_demand:
+                logger.info(f"PR曲线未预计算且严格模式开启，返回 computing 提示: {experiment_id}/{algorithm_key}")
+                return {
+                    "status": "computing",
+                    "message": "PR曲线尚未生成，请等待实验预处理完成后再试",
+                    "algorithm": algorithm_key,
+                }
+
+            logger.info(f"预计算PR曲线不存在，开始现算(兼容模式): {experiment_id}/{algorithm_key}")
 
             # 标记为计算中
             self._pr_computing.add(cache_key)
@@ -587,9 +603,27 @@ class ResultService:
                 self._trajectory_cache[cache_key] = (precomputed, time.time())
                 return precomputed
 
-            # 2. 如果没有预计算结果，现算（向后兼容）
+            # 2. 严格模式：不允许现算，返回 computing 状态
+            try:
+                from src.config.manager import get_config
+                strict = bool(get_config().experiment.get('strict_precompute', True))
+                allow_on_demand = bool(get_config().experiment.chart_config.trajectory.get('allow_on_demand_compute', False))
+            except Exception:
+                strict = True
+                allow_on_demand = False
+
+            if strict and not allow_on_demand:
+                logger.info(
+                    f"轨迹未预计算且严格模式开启，返回 computing 提示: {experiment_id}/{algorithm_key}"
+                )
+                return {
+                    "status": "computing",
+                    "message": "轨迹数据尚未生成，请等待实验预处理完成后再试",
+                    "algorithm": algorithm_key,
+                }
+
             logger.info(
-                f"预计算轨迹不存在，开始现算: {experiment_id}/{algorithm_key}, include_reference={include_reference}"
+                f"预计算轨迹不存在，开始现算(兼容模式): {experiment_id}/{algorithm_key}, include_reference={include_reference}"
             )
 
             # 验证实验是否存在

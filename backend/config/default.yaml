@@ -30,6 +30,9 @@ experiment:
     symmetric_mad:
       mad_k: 3.0
 
+  # 将可视化预处理纳入实验流程
+  strict_precompute: true
+
   # 算法支持现在通过动态发现机制确定，不再硬编码
   # supported_feature_types: 由动态配置管理器自动发现
   # supported_ransac_types: 由动态配置管理器自动发现
@@ -40,9 +43,11 @@ experiment:
       max_frames: 1000
       max_samples: 3000
       cache_ttl: 300
+      allow_on_demand_compute: false
     trajectory:
       max_frames: 500
       cache_ttl: 300
+      allow_on_demand_compute: false
     metrics:
       cache_ttl: 300
 
