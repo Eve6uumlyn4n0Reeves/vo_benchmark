@@ -34,6 +34,9 @@ class UnifiedSerializer:
             "total_frames": metrics.total_frames,
             "successful_frames": metrics.successful_frames,
             "failed_frames": metrics.failed_frames,
+            "metrics_schema_version": getattr(metrics, 'metrics_schema_version', '1.1'),
+            "source_flags": getattr(metrics, 'source_flags', {}) or {},
+
         }
 
     @staticmethod
@@ -91,13 +94,13 @@ class UnifiedSerializer:
                 else None
             ),
             "matches": (
-                UnifiedSerializer.serialize_frame_matches(frame.matches) 
-                if frame.matches 
+                UnifiedSerializer.serialize_frame_matches(frame.matches)
+                if frame.matches
                 else None
             ),
             "ransac": (
-                UnifiedSerializer.serialize_ransac_result(frame.ransac) 
-                if frame.ransac 
+                UnifiedSerializer.serialize_ransac_result(frame.ransac)
+                if frame.ransac
                 else None
             ),
             "num_matches": frame.num_matches,
@@ -137,7 +140,7 @@ class UnifiedSerializer:
     def serialize_frame_matches(matches: FrameMatches) -> Dict[str, Any]:
         """序列化帧匹配"""
         return {
-            "matches": matches.matches, 
+            "matches": matches.matches,
             "scores": matches.scores
         }
 
@@ -209,6 +212,9 @@ class UnifiedSerializer:
             total_frames=data["total_frames"],
             successful_frames=data["successful_frames"],
             failed_frames=data["failed_frames"],
+            metrics_schema_version=data.get("metrics_schema_version", "1.1"),
+            source_flags=data.get("source_flags", {}) or {},
+
         )
 
     @staticmethod
@@ -244,12 +250,12 @@ class UnifiedSerializer:
     def deserialize_ransac_metrics(data: Dict[str, Any]) -> RANSACMetrics:
         """反序列化RANSAC指标"""
         return RANSACMetrics(
-            avg_iterations=data["avg_iterations"],
-            std_iterations=data["std_iterations"],
-            min_iterations=data["min_iterations"],
-            max_iterations=data["max_iterations"],
-            convergence_rate=data["convergence_rate"],
-            avg_inlier_ratio=data["avg_inlier_ratio"],
-            success_rate=data["success_rate"],
-            avg_processing_time_ms=data["avg_processing_time_ms"],
+            avg_iterations=data.get("avg_iterations", 0.0),
+            std_iterations=data.get("std_iterations", 0.0),
+            min_iterations=data.get("min_iterations", 0),
+            max_iterations=data.get("max_iterations", 0),
+            convergence_rate=data.get("convergence_rate", 0.0),
+            avg_inlier_ratio=data.get("avg_inlier_ratio", 0.0),
+            success_rate=data.get("success_rate", 0.0),
+            avg_processing_time_ms=data.get("avg_processing_time_ms", 0.0),
         )

@@ -33,8 +33,7 @@ A professional Visual Odometry Feature Matching Evaluation System frontend built
 - **Zod** - Runtime type validation and schema parsing
 
 ### Visualization
-- **Plotly.js + react-plotly.js** - 高交互可视化（轨迹 2D/3D、子图联动、缩放/旋转、导出）
-- **Recharts** - 轻量 KPI/趋势/分布图（保留，用于非 3D 图表）
+- **Plotly.js + react-plotly.js** - 统一可视化栈（KPI 柱状/雷达、PR 曲线、轨迹 2D/3D、导出）
 
 ### Testing
 - **Jest** - Unit testing framework
@@ -238,16 +237,22 @@ docs: update API integration guide
 This frontend is 100% aligned with the backend API contract defined in `backend/docs/api-contract.md`:
 
 ### Verified Endpoints
-- ✅ Health endpoints (`/health`, `/health/detailed`, `/health/ready`)
+- ✅ Health endpoints (`/health-doc`, `/health-doc/detailed`, `/health-doc/ready`)
 - ✅ Config endpoints (`/config/client`, `/config/diagnostics`)
-- ✅ Experiments endpoints
+- ✅ Experiments endpoints (`/experiments-doc/` - 仅使用文档化路径)
 - ✅ Results endpoints
 - ✅ Tasks endpoints
+
+**注意**：实验相关功能统一使用 `/experiments-doc/` 路径，避免使用 legacy `/experiments/`。
 
 ### Contract Validation
 - Runtime schema validation with Zod
 - TypeScript types derived from API contract
 - Error handling aligned with backend error models
+
+### API 文档
+- 在线 Swagger UI：http://127.0.0.1:5000/api/v1/docs/ （需先启动后端）
+- 后端契约文档：`backend/docs/api-contract.md`
 
 ## 🚀 Deployment
 

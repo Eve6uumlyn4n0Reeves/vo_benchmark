@@ -1,10 +1,6 @@
 import { useRef, useEffect } from 'react';
-import { useSSE } from '@/hooks/useSSE';
-
-interface TaskLogEventData {
-  task_id: string;
-  line?: string;
-}
+import { useSSE, type SSEMessage } from '@/hooks/useSSE';
+import { isTaskLogEvent } from '@/app/realtime/events';
 
 export const useTaskLogsEvents = (taskId: string | undefined, enabled: boolean, onLogLine: (line: string) => void) => {
   const bufferRef = useRef<string[]>([]);
@@ -18,11 +14,13 @@ export const useTaskLogsEvents = (taskId: string | undefined, enabled: boolean, 
 
   const { isConnected } = useSSE('/api/v1/events/', {
     enabled: !!taskId && enabled,
-    onMessage: (msg) => {
-      if (msg.type === 'task_log') {
-        const data = msg.data as TaskLogEventData;
-        if (data.task_id === taskId && data.line) {
-          bufferRef.current.push(data.line);
+    onMessage: (msg: SSEMessage) => {
+      if (isTaskLogEvent(msg as any)) {
+        const data = (msg as any).data as { task_id: string; line?: string; log_entry?: string };
+        const { task_id, line, log_entry } = data;
+        const text = line ?? log_entry;
+        if (task_id === taskId && text) {
+          bufferRef.current.push(text);
         }
       }
     },

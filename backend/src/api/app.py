@@ -18,6 +18,8 @@ Version:
     1.0.0
 """
 
+from pathlib import Path
+
 import os
 import logging
 from flask import Flask, jsonify, request
@@ -63,19 +65,8 @@ except ImportError as e:
 
 # Removed optional namespaces: datasets, monitoring, comparison, match_viz, batch
 
-# Fallback import for config endpoints (ensure diagnostics available even if other optional modules fail)
-try:
-    from src.api.routes.config import (
-        config_ns as standalone_config_ns,
-        bp as standalone_config_bp,
-    )
-
-    _CONFIG_STANDALONE_AVAILABLE = True
-except ImportError as e:
-    logging.getLogger(__name__).warning(
-        f"Standalone config endpoints not available: {e}. Diagnostics may be disabled if optional modules fail."
-    )
-    _CONFIG_STANDALONE_AVAILABLE = False
+# Fallback import removed: only RESTX config namespace is supported to avoid duplicate registrations
+_CONFIG_STANDALONE_AVAILABLE = False
 
 try:
     # 仅启用统一的中间件错误处理
@@ -159,6 +150,18 @@ def create_app(config_name: Optional[str] = None) -> Flask:
 
     # Configure compression
     setup_compression(app)
+
+    # Ensure OutputDirectoryManager points to results_root/experiments
+    try:
+        from src.utils.output_manager import output_manager
+        results_root = Path(app.config.get("RESULTS_ROOT")).resolve()
+        experiments_root = (results_root / "experiments").resolve()
+        experiments_root.mkdir(parents=True, exist_ok=True)
+        output_manager.root_output_dir = experiments_root
+        output_manager.ensure_root_directory()
+        app.logger.info(f"OutputDirectoryManager configured: {experiments_root}")
+    except Exception as e:
+        app.logger.warning(f"Failed to configure OutputDirectoryManager: {e}")
 
     # Setup middleware (only if available)
     if _MIDDLEWARE_AVAILABLE:
@@ -335,14 +338,7 @@ def register_api(app: Flask) -> None:
     api.add_namespace(experiments_ns)
     api.add_namespace(health_ns)
 
-    # Config endpoints: prefer unified RESTX namespace only to avoid duplicate blueprints
-    if _CONFIG_STANDALONE_AVAILABLE:
-        try:
-            api.add_namespace(standalone_config_ns)
-        except Exception as _e:
-            app.logger.warning(f"Failed to register config namespace: {_e}")
-
-    # Optional namespaces removed (datasets, monitoring, comparison, match_viz, batch)
+    # Config endpoints: only use unified RESTX namespace to avoid duplicate blueprints
     try:
         if _HAS_CONFIG_NS:
             api.add_namespace(config_ns)

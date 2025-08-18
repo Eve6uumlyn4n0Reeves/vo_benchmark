@@ -74,12 +74,21 @@ class RANSACFactory:
         Returns:
             Dict[str, Any]: 默认配置参数
         """
+        # 读取集中配置的默认参数并合并（优先级：factory内置 < 配置文件）
+        try:
+            from src.config.manager import get_config
+            algo_defaults = (get_config().experiment.algorithms_defaults or {}).get("ransac", {})
+            cfg_from_yaml = algo_defaults.get(ransac_type.value, {})
+        except Exception:
+            cfg_from_yaml = {}
+
         base_config = {"threshold": 1.0, "confidence": 0.999, "max_iters": 2000}
+        merged = {**base_config, **cfg_from_yaml}
 
         if ransac_type == RANSACType.STANDARD:
-            return {**base_config, "method": cv2.RANSAC}
+            return {**merged, "method": cv2.RANSAC}
         elif ransac_type == RANSACType.PROSAC:
-            return {**base_config, "method": cv2.USAC_PROSAC}
+            return {**merged, "method": cv2.USAC_PROSAC}
         else:
             raise ValueError(f"不支持的RANSAC类型: {ransac_type}")
 

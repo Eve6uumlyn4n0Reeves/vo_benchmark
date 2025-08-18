@@ -16,7 +16,7 @@ import traceback
 from typing import Dict, Any, Optional, Tuple
 from flask import Flask, request, jsonify, Response
 from werkzeug.exceptions import HTTPException
-from typing import Tuple as _TupleType  # type: ignore[unused-ignore]
+
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 

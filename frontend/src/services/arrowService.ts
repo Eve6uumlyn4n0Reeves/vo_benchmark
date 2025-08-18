@@ -36,8 +36,9 @@ class ArrowService {
     if (this.worker) return this.worker;
 
     try {
-      this.worker = new Worker('/workers/arrow-parser.worker.js');
-      
+      // Use module worker bundled with Vite (local dependency, no CDN)
+      this.worker = new Worker(new URL('../workers/arrowParser.worker.ts', import.meta.url), { type: 'module' });
+
       this.worker.onmessage = (e: MessageEvent<ArrowWorkerResponse>) => {
         const { id, success, result, error } = e.data;
         const request = this.pendingRequests.get(id);

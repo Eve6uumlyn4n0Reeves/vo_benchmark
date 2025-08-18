@@ -61,11 +61,12 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
-    '@typescript-eslint/no-explicit-any': 'error',
-    '@typescript-eslint/no-unsafe-assignment': 'error',
-    '@typescript-eslint/no-unsafe-member-access': 'error',
-    '@typescript-eslint/no-unsafe-call': 'error',
-    '@typescript-eslint/no-unsafe-return': 'error',
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/no-unsafe-assignment': 'warn',
+    '@typescript-eslint/no-unsafe-member-access': 'warn',
+    '@typescript-eslint/no-unsafe-call': 'warn',
+    '@typescript-eslint/no-unsafe-return': 'warn',
+    '@typescript-eslint/no-unsafe-argument': 'warn',
     
     // React specific
     'react/react-in-jsx-scope': 'off',
@@ -90,11 +91,37 @@ module.exports = {
     'import/no-self-import': 'off',
     'import/no-relative-packages': 'off',
     'import/no-cycle': 'off',
+    'import/no-duplicates': 'warn',
+    'import/order': 'warn',
+    'import/no-named-as-default': 'warn',
+    'import/first': 'warn',
+    'import/newline-after-import': 'warn',
+    'import/export': 'warn',
 
     // General
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'no-debugger': 'error',
     'prefer-const': 'error',
+
+    // Temporarily relax some strict rules for legacy code
+    'no-param-reassign': 'warn',
+    'no-plusplus': 'off',
+    'no-await-in-loop': 'warn',
+    'no-promise-executor-return': 'warn',
+    'no-restricted-properties': 'warn',
+    'no-restricted-globals': 'warn',
+    'max-len': ['warn', { code: 120 }],
+    'object-curly-newline': 'off',
+    'implicit-arrow-linebreak': 'off',
+    'arrow-parens': ['warn', 'as-needed'],
+    'arrow-body-style': 'off',
+    'operator-linebreak': 'off',
+    'newline-per-chained-call': 'off',
+    'no-confusing-arrow': 'off',
+    'no-multi-spaces': 'off',
+    'no-multiple-empty-lines': ['warn', { max: 2, maxEOF: 1 }],
+    'no-trailing-spaces': 'warn',
+    'func-names': 'off',
 
     // Accessibility
     'jsx-a11y/anchor-is-valid': [

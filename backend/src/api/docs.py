@@ -246,9 +246,9 @@ task_model = api.model(
         ),
         "status": fields.String(
             required=True,
-            enum=["PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"],
+            enum=["pending", "running", "completed", "failed", "cancelled"],
             description="Current task status",
-            example="RUNNING",
+            example="running",
         ),
         "progress": fields.Float(
             required=True,

@@ -59,8 +59,8 @@ def main():
         # 创建Flask应用
         app = create_app(config_name)
 
-        # 启动应用
-        app.run(host=host, port=port, debug=debug, threaded=True)
+        # 启动应用（禁用自动重载，避免多进程端口竞争与超时）
+        app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=False)
 
     except Exception as e:
         logger.error(f"应用启动失败: {e}")

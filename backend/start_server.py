@@ -21,14 +21,13 @@ sys.path.insert(0, str(backend_dir))
 # Set up environment variables
 os.environ.setdefault('FLASK_ENV', 'development')
 os.environ.setdefault('FLASK_HOST', '0.0.0.0')
-os.environ.setdefault('FLASK_PORT', os.environ.get('FLASK_PORT', os.environ.get('FLASK_PORT', '5000')))
+os.environ.setdefault('FLASK_PORT', '5000')
 os.environ.setdefault('FLASK_DEBUG', 'true')
 
-# 数据库配置
-os.environ.setdefault('DATABASE_URL', os.environ.get('DATABASE_URL', 'sqlite:///vo_benchmark.db'))
-
-# Redis配置
-os.environ.setdefault('REDIS_URL', os.environ.get('REDIS_URL', 'redis://localhost:6379/0'))
+# Note: DATABASE_URL and REDIS_URL are optional placeholders for future use
+# Current implementation uses file-based storage and in-memory task management
+os.environ.setdefault('DATABASE_URL', 'sqlite:///vo_benchmark.db')
+os.environ.setdefault('REDIS_URL', 'redis://localhost:6379/0')
 
 # 安全配置
 if not os.environ.get('SECRET_KEY'):
@@ -61,14 +60,18 @@ def create_directories():
     logger.info("必要目录已创建")
 
 def ensure_results_root_env():
-    """确保 RESULTS_ROOT 环境变量存在并指向 backend/results 的绝对路径（若未设置）。"""
+    """不再隐式覆盖 RESULTS_ROOT。仅在缺失时输出提示，实际统一由 ConfigManager 管理。
+    保持向后兼容：如果已设置则记录；未设置则提示最好在配置文件或环境变量中显式配置。
+    """
     try:
-        if not os.environ.get('RESULTS_ROOT'):
-            results_dir = (backend_dir / 'results').resolve()
-            os.environ['RESULTS_ROOT'] = str(results_dir)
-            logger.info(f"RESULTS_ROOT 未设置，已默认指向: {results_dir}")
+        if os.environ.get('RESULTS_ROOT'):
+            logger.info(f"RESULTS_ROOT 已设置为: {os.environ.get('RESULTS_ROOT')}")
+        else:
+            logger.info(
+                "RESULTS_ROOT 未设置，将由配置管理器默认值决定（storage.results_root）。"
+            )
     except Exception as e:
-        logger.warning(f"设置 RESULTS_ROOT 失败（忽略）: {e}")
+        logger.warning(f"检查 RESULTS_ROOT 失败（忽略）: {e}")
 
 def main():
     """Main function to start the server"""

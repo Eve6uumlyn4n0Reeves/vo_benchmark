@@ -4,7 +4,7 @@
 提供客户端配置获取和系统配置管理功能。
 """
 
-from flask import Blueprint, jsonify, request
+from flask import jsonify, request
 from flask_restx import Namespace, Resource, fields
 from src.api.docs import api
 from src.config.manager import get_config, get_client_config
@@ -12,10 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# 创建Blueprint
-bp = Blueprint("config", __name__)
-
-# 创建Flask-RESTX Namespace
+# 仅使用 Flask-RESTX Namespace（不再导出 Blueprint，避免重复注册与冲突）
 config_ns = api.namespace("config", description="配置管理操作")
 
 # 定义响应模型
@@ -117,21 +114,82 @@ class AlgorithmsConfig(Resource):
     def get(self):
         """获取算法配置
 
-        返回系统支持的算法类型和参数。
+        返回系统支持的算法类型和参数，基于动态发现机制。
         """
         try:
-            config = get_config()
+            # 使用动态配置管理器
+            from src.config.dynamic_config import get_dynamic_config_manager
+            manager = get_dynamic_config_manager()
 
             algorithms_config = {
+                "featureTypes": manager.get_available_feature_types(),
+                "ransacTypes": manager.get_available_ransac_types(),
+            }
+
+            logger.info(f"Dynamic algorithms configuration requested: {algorithms_config}")
+            return algorithms_config
+        except Exception as e:
+            logger.error(f"Failed to get algorithms config: {e}")
+            # 回退到静态配置
+            config = get_config()
+            return {
                 "featureTypes": config.experiment.supported_feature_types,
                 "ransacTypes": config.experiment.supported_ransac_types,
             }
 
-            logger.info("Algorithms configuration requested")
-            return algorithms_config
+
+@config_ns.route("/algorithms/capabilities")
+class AlgorithmsCapabilities(Resource):
+    @config_ns.doc("get_algorithms_capabilities")
+    def get(self):
+        """获取算法详细能力信息
+
+        返回每个算法的详细信息，包括可用性、要求、默认配置等。
+        """
+        try:
+            from src.config.dynamic_config import get_dynamic_config_manager
+            manager = get_dynamic_config_manager()
+
+            capabilities = {
+                "features": {},
+                "ransac": {},
+                "chart_config": {
+                    "pr_curve": manager.get_chart_config("pr_curve"),
+                    "trajectory": manager.get_chart_config("trajectory"),
+                    "metrics": manager.get_chart_config("metrics")
+                }
+            }
+
+            # 获取特征算法能力
+            for feature_type in manager.get_available_feature_types():
+                cap = manager.get_feature_capability(feature_type)
+                if cap:
+                    capabilities["features"][feature_type] = {
+                        "name": cap.name,
+                        "display_name": cap.display_name,
+                        "description": cap.description,
+                        "is_available": cap.is_available,
+                        "requirements": cap.requirements,
+                        "supported_matchers": cap.supported_matchers
+                    }
+
+            # 获取RANSAC算法能力
+            for ransac_type in manager.get_available_ransac_types():
+                cap = manager.get_ransac_capability(ransac_type)
+                if cap:
+                    capabilities["ransac"][ransac_type] = {
+                        "name": cap.name,
+                        "display_name": cap.display_name,
+                        "description": cap.description,
+                        "is_available": cap.is_available,
+                        "requirements": cap.requirements
+                    }
+
+            logger.info("Algorithms capabilities requested")
+            return capabilities
         except Exception as e:
-            logger.error(f"Failed to get algorithms config: {e}")
-            return {"error": "Failed to get algorithms configuration"}, 500
+            logger.error(f"Failed to get algorithms capabilities: {e}")
+            return {"error": "Failed to get algorithms capabilities"}, 500
 
 
 @config_ns.route("/diagnostics")

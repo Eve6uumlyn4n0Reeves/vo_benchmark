@@ -93,10 +93,10 @@ CORS_ORIGINS=http://localhost:3000  # 跨域配置
    curl http://localhost:3000
    
    # 后端健康检查
-   curl http://localhost:5000/api/v1/health
+   curl http://localhost:5000/api/v1/health-doc/
    
    # 详细健康检查
-   curl http://localhost:5000/api/v1/health/detailed
+   curl http://localhost:5000/api/v1/health-doc/detailed
    
    # API 文档
    curl http://localhost:5000/api/v1/docs/

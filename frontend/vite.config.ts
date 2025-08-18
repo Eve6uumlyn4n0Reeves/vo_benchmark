@@ -51,7 +51,6 @@ export default defineConfig(({ mode }) => {
             query: ['@tanstack/react-query'],
             // Heavy visualization libraries - lazy loaded（由组件内动态 import）
             plotly: ['react-plotly.js'],
-            recharts: ['recharts'],
             forms: ['react-hook-form', 'zod'],
           },
         },
@@ -71,8 +70,7 @@ export default defineConfig(({ mode }) => {
         'axios',
         'zod',
         'zustand',
-        // 预构建 plotly 相关包
-        'plotly.js-dist-min',
+        // 预构建 plotly 相关包（仅包含已安装依赖）
         'react-plotly.js',
       ],
       exclude: [

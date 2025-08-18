@@ -136,6 +136,8 @@ class AlgorithmMetrics:
     total_frames: int
     successful_frames: int
     failed_frames: int
+    metrics_schema_version: str = '1.1'
+    source_flags: Dict[str, str] = None  # e.g., {'match_scores': 'present'|'absent', 'reprojection': 'present'|'absent'}
 
     def __post_init__(self):
         """验证算法指标数据有效性"""

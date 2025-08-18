@@ -192,12 +192,31 @@ class ExperimentList(Resource):
                 sort_order=args.get("sort_order", "desc"),
             )
 
+            # Support both list and dict returns from service layer (tests may mock a list)
+            def serialize(exp):
+                return exp.model_dump() if hasattr(exp, "model_dump") else (
+                    exp.dict() if hasattr(exp, "dict") else dict(exp)
+                )
+
+            if isinstance(result, list):
+                experiments_list = [serialize(exp) for exp in result]
+                pagination = {
+                    "page": page,
+                    "per_page": per_page,
+                    "total": len(experiments_list),
+                    "pages": 1,
+                }
+            else:
+                experiments_iter = result.get("experiments", [])
+                experiments_list = [serialize(exp) for exp in experiments_iter]
+                pagination = result.get(
+                    "pagination",
+                    {"page": page, "per_page": per_page, "total": len(experiments_list), "pages": 1},
+                )
+
             return {
-                "experiments": [
-                    exp.model_dump() if hasattr(exp, "model_dump") else exp.dict()
-                    for exp in result["experiments"]
-                ],
-                "pagination": result["pagination"],
+                "experiments": experiments_list,
+                "pagination": pagination,
             }
 
         except Exception as e:
@@ -295,7 +314,8 @@ class ExperimentList(Resource):
             experiment_data = {
                 "experiment_id": task.experiment_id,
                 "name": request_model.name,
-                "status": task_data.get("status"),
+                # Experiment.status 按文档为大写枚举；新建为 CREATED
+                "status": "CREATED",
                 "config": {
                     "name": request_model.name,
                     "dataset_path": request_model.dataset_path,
@@ -306,9 +326,11 @@ class ExperimentList(Resource):
                     "num_runs": request_model.num_runs,
                     "max_features": request_model.max_features,
                     "parallel_jobs": request_model.parallel_jobs,
+                    "feature_params": {},
+                    "ransac_params": {},
                 },
                 "created_at": task_data.get("created_at"),
-                "started_at": task_data.get("created_at"),
+                "updated_at": task_data.get("created_at"),
                 "completed_at": None,
                 "summary": None,
                 "algorithms": [],

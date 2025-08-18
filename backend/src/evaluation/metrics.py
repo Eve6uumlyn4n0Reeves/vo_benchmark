@@ -33,6 +33,7 @@ class MetricsCalculator:
             # 累积指标数据
             all_matches = []
             all_inlier_ratios = []
+            all_match_scores = []
             all_pose_errors = []
             all_reprojection_errors = []
 
@@ -55,6 +56,12 @@ class MetricsCalculator:
                         all_matches.append(frame_result.num_matches)
                     if frame_result.inlier_ratio is not None:
                         all_inlier_ratios.append(frame_result.inlier_ratio)
+                        # 累积匹配分数（如果有）
+                        try:
+                            if hasattr(frame_result, 'matches') and frame_result.matches and getattr(frame_result.matches, 'scores', None):
+                                all_match_scores.extend([float(s) for s in frame_result.matches.scores])
+                        except Exception:
+                            pass
 
                     # 收集位姿误差数据
                     if frame_result.pose_error is not None:
@@ -90,6 +97,21 @@ class MetricsCalculator:
                 if hasattr(self, "_compute_matching_metrics_from_data")
                 else self.compute_matching_metrics([])
             )
+            # 使用流式累积的 match_scores / reprojection_errors 回填
+            try:
+                if 'all_match_scores' in locals() or 'all_reprojection_errors' in locals():
+                    from src.models.evaluation import MatchingMetrics as _MM
+                    avg_match_score = float(np.mean(all_match_scores)) if all_match_scores else getattr(matching_metrics, 'avg_match_score', 0.0)
+                    avg_reproj = float(np.mean(all_reprojection_errors)) if all_reprojection_errors else getattr(matching_metrics, 'avg_reprojection_error', 0.0)
+                    matching_metrics = _MM(
+                        avg_matches=matching_metrics.avg_matches,
+                        avg_inliers=matching_metrics.avg_inliers,
+                        avg_inlier_ratio=matching_metrics.avg_inlier_ratio,
+                        avg_match_score=avg_match_score,
+                        avg_reprojection_error=avg_reproj,
+                    )
+            except Exception:
+                pass
             ransac_metrics = self._compute_ransac_metrics_from_data(
                 all_inlier_ratios, all_iterations, all_processing_times,
                 successful_ransac, total_ransac_attempts
@@ -97,6 +119,12 @@ class MetricsCalculator:
             trajectory_metrics = self._compute_trajectory_metrics_from_data(
                 all_pose_errors
             )
+
+            # source_flags 构造
+            source_flags = {
+                "match_scores": "present" if (locals().get('all_match_scores') and len(all_match_scores) > 0) else "absent",
+                "reprojection": "present" if (locals().get('all_reprojection_errors') and len(all_reprojection_errors) > 0) else "absent",
+            }
 
             return AlgorithmMetrics(
                 algorithm_key=algorithm_run.algorithm_key,
@@ -113,6 +141,8 @@ class MetricsCalculator:
                 total_frames=total_frames,
                 successful_frames=successful_frames,
                 failed_frames=failed_frames,
+                metrics_schema_version='1.1',
+                source_flags=source_flags,
             )
 
         except Exception as e:
@@ -154,6 +184,14 @@ class MetricsCalculator:
                     reason = frame.status
                     failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
 
+            # source_flags
+            has_scores = any((f.matches and getattr(f.matches, 'scores', None)) for f in frame_results)
+            has_reproj = any((getattr(f, 'reprojection_errors', None)) for f in frame_results)
+            source_flags = {
+                "match_scores": "present" if has_scores else "absent",
+                "reprojection": "present" if has_reproj else "absent",
+            }
+
             return AlgorithmMetrics(
                 algorithm_key=algorithm_run.algorithm_key,
                 feature_type=algorithm_run.feature_type.value,
@@ -169,6 +207,8 @@ class MetricsCalculator:
                 total_frames=total_frames,
                 successful_frames=successful_frames,
                 failed_frames=failed_frames,
+                metrics_schema_version='1.1',
+                source_flags=source_flags,
             )
 
         except Exception as e:
@@ -197,18 +237,21 @@ class MetricsCalculator:
             reprojection_errors = []
 
             for frame in frame_results:
-                if frame.matches and frame.ransac:
+                # 有数则计 —— 只要该维度存在就计入对应聚合，不强制要求同时有 ransac
+                if frame.num_matches is not None:
                     matches_counts.append(frame.num_matches)
+                if frame.num_inliers is not None:
                     inliers_counts.append(frame.num_inliers)
+                if frame.inlier_ratio is not None:
                     inlier_ratios.append(frame.inlier_ratio)
 
-                    # 计算平均匹配分数
-                    if frame.matches.scores:
-                        match_scores.extend(frame.matches.scores)
+                # 计算平均匹配分数
+                if frame.matches and frame.matches.scores:
+                    match_scores.extend(frame.matches.scores)
 
-                    # 收集重投影误差
-                    if frame.reprojection_errors:
-                        reprojection_errors.extend(frame.reprojection_errors)
+                # 收集重投影误差
+                if frame.reprojection_errors:
+                    reprojection_errors.extend(frame.reprojection_errors)
 
             return MatchingMetrics(
                 avg_matches=float(np.mean(matches_counts)) if matches_counts else 0.0,

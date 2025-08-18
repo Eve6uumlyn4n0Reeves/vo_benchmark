@@ -61,20 +61,39 @@ class ExperimentConfig:
             "symmetric_mad": {"mad_k": 3.0},
         }
     )
-    supported_feature_types: List[str] = field(
-        default_factory=lambda: ["SIFT", "ORB", "AKAZE", "BRISK", "KAZE", "SURF"]
-    )
-    supported_ransac_types: List[str] = field(
-        default_factory=lambda: [
-            "STANDARD",
-            "PROSAC",
-            "USAC_DEFAULT",
-            "USAC_MAGSAC",
-            "USAC_ACCURATE",
-            "RHO",
-            "LMEDS",
-        ]
-    )
+    # 动态算法支持 - 不再硬编码
+    supported_feature_types: List[str] = field(default_factory=list)
+    supported_ransac_types: List[str] = field(default_factory=list)
+
+    # 算法默认参数（集中管理，可由配置覆盖）
+    algorithms_defaults: Dict[str, Any] = field(default_factory=dict)
+
+    # 图表配置参数
+    chart_config: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """初始化后动态加载算法支持"""
+        if not self.supported_feature_types or not self.supported_ransac_types:
+            self._load_dynamic_algorithms()
+
+    def _load_dynamic_algorithms(self):
+        """动态加载可用算法"""
+        try:
+            from .dynamic_config import get_dynamic_config_manager
+            manager = get_dynamic_config_manager()
+
+            if not self.supported_feature_types:
+                self.supported_feature_types = manager.get_available_feature_types()
+
+            if not self.supported_ransac_types:
+                self.supported_ransac_types = manager.get_available_ransac_types()
+
+        except ImportError as e:
+            # 回退到默认值
+            if not self.supported_feature_types:
+                self.supported_feature_types = ["SIFT", "ORB", "AKAZE", "BRISK", "KAZE"]
+            if not self.supported_ransac_types:
+                self.supported_ransac_types = ["STANDARD", "PROSAC"]
 
 
 @dataclass
@@ -386,8 +405,8 @@ class ConfigManager:
     def _normalize_paths(self, config: AppConfig) -> None:
         """将存储等路径规范化为绝对路径（当提供为相对路径时锚定到 backend 目录）。"""
         try:
-            # backend/src/config/manager.py → backend 目录
-            backend_dir = Path(__file__).resolve().parents[2]
+            # backend/src/config/manager.py → 项目根目录
+            project_root = Path(__file__).resolve().parents[3]
 
             def to_abs(p: str) -> str:
                 try:
@@ -395,7 +414,7 @@ class ConfigManager:
                     return str(
                         path_obj
                         if path_obj.is_absolute()
-                        else (backend_dir / path_obj).resolve()
+                        else (project_root / path_obj).resolve()
                     )
                 except Exception:
                     # 若解析失败，原样返回

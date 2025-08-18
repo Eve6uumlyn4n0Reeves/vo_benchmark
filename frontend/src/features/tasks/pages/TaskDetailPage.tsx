@@ -10,7 +10,6 @@ import {
   Grid,
 
   Alert,
-  LinearProgress,
 } from '@mui/material';
 import {
   ArrowBackOutlined,
@@ -24,6 +23,7 @@ import {
   LoadingSpinner,
   ErrorState,
   CardSkeleton,
+  ProgressBar01,
 } from '@/components/common';
 import { TaskStatusChip, TaskLogsViewer } from '../components';
 import { useTaskEvents } from '../hooks/useTaskEvents';
@@ -274,18 +274,13 @@ const TaskDetailPage: React.FC = () => {
                 </Typography>
                 {task.progress !== undefined ? (
                   <Box>
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                      <Typography variant="body2" color="text.secondary">
-                        完成进度
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {Math.round(task.progress * 100)}%
-                      </Typography>
-                    </Box>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={task.progress * 100} 
-                      sx={{ height: 8, borderRadius: 4 }}
+                    <Typography variant="body2" color="text.secondary" mb={1}>
+                      完成进度
+                    </Typography>
+                    <ProgressBar01
+                      value01={task.progress}
+                      height={8}
+                      showLabel={true}
                     />
                   </Box>
                 ) : (

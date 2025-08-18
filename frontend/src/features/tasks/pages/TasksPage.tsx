@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -33,6 +34,8 @@ import { useTaskEvents } from '../hooks/useTaskEvents';
 
 const TasksPage: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = React.useState(true);
+  const [searchParams] = useSearchParams();
+  const filterExperimentId = searchParams.get('experimentId') || undefined;
   const [filters, setFilters] = React.useState<TasksListParams>({
     page: 1,
     per_page: 20,
@@ -92,7 +95,10 @@ const TasksPage: React.FC = () => {
   };
 
   // Data processing - moved to top level to follow hooks rules
-  const tasks = tasksQuery.data || [];
+  const allTasks = tasksQuery.data || [];
+  const tasks = React.useMemo(() => {
+    return filterExperimentId ? allTasks.filter(t => t.experiment_id === filterExperimentId) : allTasks;
+  }, [allTasks, filterExperimentId]);
   const paginationData = undefined as any;
 
   // Count tasks by status

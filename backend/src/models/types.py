@@ -42,6 +42,15 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ExperimentStatus(str, Enum):
+    """实验状态枚举 - 使用大写值以匹配前端期望"""
+    CREATED = "CREATED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
 class ErrorCode(str, Enum):
     VALIDATION_ERROR = "VALIDATION_ERROR"
     DATASET_NOT_FOUND = "DATASET_NOT_FOUND"

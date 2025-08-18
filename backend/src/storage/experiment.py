@@ -147,19 +147,6 @@ class ExperimentStorage:
             logger.debug(f"获取Arrow PR曲线数据失败: {e}")
             return None
 
-    def get_pr_curve_arrow(self, experiment_id: str, algorithm_key: str, ui_version: bool = False) -> Optional[dict]:
-        """获取Arrow格式的PR曲线数据"""
-        try:
-            from .arrow_writer import ArrowReader
-            reader = ArrowReader()
-
-            suffix = ".ui.arrow" if ui_version else ".arrow"
-            arrow_path = self._storage.root_dir / f"experiments/{experiment_id}/pr_curves/{algorithm_key}{suffix}"
-
-            return reader.read_pr_curve(arrow_path)
-        except Exception as e:
-            logger.debug(f"获取Arrow PR曲线数据失败: {e}")
-            return None
 
     def save_trajectory(self, experiment_id: str, algorithm_key: str, trajectory_data: dict) -> None:
         """保存预计算的轨迹数据（同时保存Full和UI版本）"""
@@ -229,6 +216,22 @@ class ExperimentStorage:
             logger.debug(f"获取帧结果统计失败: {e}")
             return None
 
+    def list_algorithms(self, experiment_id: str) -> List[str]:
+        """列出实验下的算法键（仅一层，不包含帧/文件名）。"""
+        try:
+            prefix = f"experiments/{experiment_id}/algorithms/"
+            keys = self._storage.list_keys(prefix)
+            algs = []
+            for k in keys:
+                if not k.startswith(prefix):
+                    continue
+                parts = k[len(prefix):].split("/")
+                if parts and parts[0] and parts[0] not in algs:
+                    algs.append(parts[0])
+            return sorted(algs)
+        except Exception:
+            return []
+
     def _batch_load_frames(self, frame_keys: List[str]) -> List[FrameResult]:
         """批量加载帧文件，提升性能"""
         import concurrent.futures
@@ -264,12 +267,9 @@ class ExperimentStorage:
     def get_experiment(self, experiment_id: str) -> Optional[ExperimentSummary]:
         """获取实验摘要"""
         try:
-            # 兼容旧目录结构（root 指向 data/results/experiments 时会多一层 experiments）
-            primary_key = f"experiments/{experiment_id}/summary"
-            data = self._storage.load(primary_key)
-            if data is None:
-                fallback_key = f"experiments/experiments/{experiment_id}/summary"
-                data = self._storage.load(fallback_key)
+            # 统一目录结构：仅允许 experiments/{id}/summary
+            key = f"experiments/{experiment_id}/summary"
+            data = self._storage.load(key)
             if data is None:
                 return None
             return self._deserialize_experiment_summary(data)
@@ -439,16 +439,12 @@ class ExperimentStorage:
             return []
 
     def delete_experiment(self, experiment_id: str) -> bool:
-        """删除实验及其所有数据（兼容旧目录 experiments/experiments/<id>/...）。"""
+        """删除实验及其所有数据（统一目录 experiments/{id}/...）。"""
         try:
             deleted_count = 0
 
-            # 1) 标准前缀
-            prefixes = [
-                f"experiments/{experiment_id}/",
-                # 2) 兼容旧目录：当 root 指向 experiments 目录时，会产生双层 experiments
-                f"experiments/experiments/{experiment_id}/",
-            ]
+            # 仅标准前缀
+            prefixes = [f"experiments/{experiment_id}/"]
 
             seen_keys = set()
             for prefix in prefixes:
@@ -632,6 +628,11 @@ class ExperimentStorage:
                 if hasattr(features, "descriptors") and features.descriptors is not None
                 else []
             ),
+            "scores": (
+                features.scores
+                if hasattr(features, "scores") and features.scores is not None
+                else []
+            ),
         }
 
     def _save_trajectory_arrow(self, experiment_id: str, algorithm_key: str, trajectory_data: dict) -> None:
@@ -776,29 +777,50 @@ class ExperimentStorage:
             RANSACMetrics,
         )
 
+        # 处理轨迹指标
         trajectory = None
         if data.get("trajectory"):
             traj_data = data["trajectory"]
             trajectory = TrajectoryMetrics(**traj_data)
 
-        matching = MatchingMetrics(**data["matching"])
-        ransac = RANSACMetrics(**data["ransac"])
+        # 处理匹配指标
+        matching_data = data.get("matching", {})
+        matching = MatchingMetrics(
+            avg_matches=matching_data.get("avg_matches", 0.0),
+            avg_inliers=matching_data.get("avg_inliers", 0.0),
+            avg_inlier_ratio=matching_data.get("avg_inlier_ratio", 0.0),
+            avg_match_score=matching_data.get("avg_match_score", 0.0),
+            avg_reprojection_error=matching_data.get("avg_reprojection_error", 0.0),
+        )
+
+        # 处理RANSAC指标
+        ransac_data = data.get("ransac", {})
+        ransac = RANSACMetrics(
+            avg_iterations=ransac_data.get("avg_iterations", 0.0),
+            std_iterations=ransac_data.get("std_iterations", 0.0),
+            min_iterations=ransac_data.get("min_iterations", 0),
+            max_iterations=ransac_data.get("max_iterations", 0),
+            convergence_rate=ransac_data.get("convergence_rate", 0.0),
+            avg_inlier_ratio=ransac_data.get("avg_inlier_ratio", 0.0),
+            success_rate=ransac_data.get("success_rate", 0.0),
+            avg_processing_time_ms=ransac_data.get("avg_processing_time_ms", 0.0),
+        )
 
         return AlgorithmMetrics(
-            algorithm_key=data["algorithm_key"],
-            feature_type=data["feature_type"],
-            ransac_type=data["ransac_type"],
+            algorithm_key=data.get("algorithm_key", "unknown"),
+            feature_type=data.get("feature_type", "UNKNOWN"),
+            ransac_type=data.get("ransac_type", "UNKNOWN"),
             trajectory=trajectory,
             matching=matching,
             ransac=ransac,
-            avg_frame_time_ms=data["avg_frame_time_ms"],
-            total_time_s=data["total_time_s"],
-            fps=data["fps"],
-            success_rate=data["success_rate"],
-            failure_reasons=data["failure_reasons"],
-            total_frames=data["total_frames"],
-            successful_frames=data["successful_frames"],
-            failed_frames=data["failed_frames"],
+            avg_frame_time_ms=data.get("avg_frame_time_ms", 0.0),
+            total_time_s=data.get("total_time_s", 0.0),
+            fps=data.get("fps", 0.0),
+            success_rate=data.get("success_rate", 0.0),
+            failure_reasons=data.get("failure_reasons", {}),
+            total_frames=data.get("total_frames", 0),
+            successful_frames=data.get("successful_frames", 0),
+            failed_frames=data.get("failed_frames", 0),
         )
 
     def _deserialize_frame_result(self, data: dict) -> FrameResult:
@@ -814,10 +836,10 @@ class ExperimentStorage:
                 keypoints=feat_data["keypoints"],
                 descriptors=(
                     np.array(feat_data["descriptors"])
-                    if feat_data["descriptors"]
+                    if feat_data.get("descriptors")
                     else None
                 ),
-                scores=feat_data["scores"],
+                scores=feat_data.get("scores"),
             )
 
         matches = None

@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import { useExperiments, useDeleteExperiment } from '@/api/services';
 import { usePagination } from '@/hooks';
+import { useExperimentEvents } from '../hooks/useExperimentEvents';
 import {
   LoadingSpinner,
   ErrorState,
@@ -56,6 +57,9 @@ const ExperimentsPage: React.FC = () => {
       per_page: pagination.per_page,
     }));
   }, [pagination.page, pagination.per_page]);
+
+  // Subscribe to experiment SSE to keep list in sync
+  useExperimentEvents(true);
 
   const experimentsQuery = useExperiments(filters);
   const deleteExperimentMutation = useDeleteExperiment();

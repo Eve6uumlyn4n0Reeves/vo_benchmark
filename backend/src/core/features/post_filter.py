@@ -7,6 +7,29 @@ from src.models.frame import FrameMatches
 
 logger = logging.getLogger(__name__)
 
+
+# Cache GMS capability detection to avoid repeated attempts/log spam
+_GMS_CHECKED: bool = False
+_GMS_AVAILABLE: bool = False
+_GMS_LOGGED: bool = False
+
+
+def _check_gms_available() -> bool:
+    global _GMS_CHECKED, _GMS_AVAILABLE, _GMS_LOGGED
+    if _GMS_CHECKED:
+        return _GMS_AVAILABLE
+    try:
+        import cv2  # local to be safe with lazy importers
+        _GMS_AVAILABLE = hasattr(cv2, "xfeatures2d") and hasattr(cv2.xfeatures2d, "matchGMS")  # type: ignore[attr-defined]
+    except Exception:
+        _GMS_AVAILABLE = False
+    _GMS_CHECKED = True
+    if not _GMS_LOGGED and not _GMS_AVAILABLE:
+        # Only log once to avoid console flooding
+        logger.info("OpenCV GMS (xfeatures2d.matchGMS) not available; using symmetric+MAD filter.")
+        _GMS_LOGGED = True
+    return _GMS_AVAILABLE
+
 MatchPair = Tuple[int, int]
 
 
@@ -40,9 +63,9 @@ def apply_gms_filter(
     image_shape: (H, W)
     """
     try:
-        # Try OpenCV contrib implementation
-        if not hasattr(cv2, "xfeatures2d"):
-            raise RuntimeError("OpenCV xfeatures2d not available")
+        # Try OpenCV contrib implementation (once)
+        if not _check_gms_available():
+            raise RuntimeError("OpenCV GMS not available")
         kp1 = _to_keypoints(keypoints1)
         kp2 = _to_keypoints(keypoints2)
         dm = _to_dmatches(matches.matches)
@@ -72,7 +95,11 @@ def apply_gms_filter(
         filtered_scores = [s for (p, s) in zip(matches.matches, matches.scores) if p in keep]
         return FrameMatches(matches=filtered_pairs, scores=filtered_scores)
     except Exception as e:
-        logger.warning(f"GMS not available or failed: {e}. Falling back to symmetric+MAD filter.")
+        # Only warn once to prevent log flooding in long sequences
+        global _GMS_LOGGED
+        if not _GMS_LOGGED:
+            logger.warning(f"GMS not available or failed: {e}. Falling back to symmetric+MAD filter.")
+            _GMS_LOGGED = True
         return apply_symmetric_mad_filter(keypoints1, keypoints2, matches)
 
 

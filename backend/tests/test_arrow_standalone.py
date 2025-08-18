@@ -20,7 +20,8 @@ def temp_dir():
     """创建临时目录"""
     temp_path = Path(tempfile.mkdtemp())
     yield temp_path
-    shutil.rmtree(temp_path)
+    # Windows上可能存在句柄占用，使用忽略错误方式清理
+    shutil.rmtree(temp_path, ignore_errors=True)
 
 
 @pytest.mark.skipif(not ARROW_AVAILABLE, reason="PyArrow not available")
@@ -86,9 +87,13 @@ class TestArrowBasicFunctionality:
         recalls = read_table.column('recalls').to_pylist()
         thresholds = read_table.column('thresholds').to_pylist()
         
-        assert precisions == data['precisions']
-        assert recalls == data['recalls']
-        assert thresholds == data['thresholds']
+        # 浮点比较采用近似断言，避免 float32 读回与 Python float 的微小差异
+        for a, b in zip(precisions, data['precisions']):
+            assert abs(a - b) < 1e-6
+        for a, b in zip(recalls, data['recalls']):
+            assert abs(a - b) < 1e-6
+        for a, b in zip(thresholds, data['thresholds']):
+            assert abs(a - b) < 1e-6
 
     def test_arrow_with_metadata(self, temp_dir):
         """测试带元数据的 Arrow 文件"""
@@ -201,7 +206,9 @@ class TestArrowDataTypes:
         assert read_table.column('string_col').type == pa.string()
         
         # 验证数据内容
-        assert read_table.column('float_col').to_pylist() == [1.1, 2.2, 3.3]
+        vals = read_table.column('float_col').to_pylist()
+        for a, b in zip(vals, [1.1, 2.2, 3.3]):
+            assert abs(a - b) < 1e-6
         assert read_table.column('string_col').to_pylist() == ['a', 'b', 'c']
 
 

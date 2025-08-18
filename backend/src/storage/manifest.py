@@ -6,7 +6,7 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class ManifestManager:
                 "version": 1,
                 "experiment_id": experiment_id,
                 "algorithm_key": algorithm_key,
-                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "trajectory": self._get_trajectory_info(experiment_id, algorithm_key),
                 "pr_curve": self._get_pr_curve_info(experiment_id, algorithm_key),
                 "frames": self._get_frames_info(experiment_id, algorithm_key),
@@ -174,12 +174,20 @@ class ManifestManager:
                 except Exception:
                     pass
             
+            try:
+                rel = path.relative_to(self.storage_root / 'experiments').as_posix()
+                url = f"/assets/experiments/{rel}"
+            except Exception:
+                # 回退：相对 storage_root
+                rel = path.relative_to(self.storage_root).as_posix() if path.is_absolute() else path.as_posix()
+                url = f"/assets/experiments/{rel}"
+
             info = {
-                "url": f"/assets/experiments/{path.relative_to(self.storage_root / 'experiments')}",
+                "url": url,
                 "bytes": stat.st_size,
                 "hash": file_hash,
                 "encoding": encoding,
-                "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat() + "Z"
+                "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
             }
             
             if points is not None:
@@ -189,8 +197,14 @@ class ManifestManager:
             
         except Exception as e:
             logger.error(f"获取文件信息失败 {path}: {e}")
+            # 当文件不在 experiments 子树时，退化为相对 storage_root 的 URL
+            try:
+                rel = path.relative_to(self.storage_root).as_posix()
+                url = f"/assets/experiments/{rel}"
+            except Exception:
+                url = f"/assets/experiments/{path.name}"
             return {
-                "url": f"/assets/experiments/{path.relative_to(self.storage_root / 'experiments')}",
+                "url": url,
                 "bytes": 0,
                 "hash": "sha256:unknown",
                 "encoding": encoding,
@@ -203,7 +217,7 @@ class ManifestManager:
             "version": 1,
             "experiment_id": experiment_id,
             "algorithm_key": algorithm_key,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "trajectory": {},
             "pr_curve": {},
             "frames": {},

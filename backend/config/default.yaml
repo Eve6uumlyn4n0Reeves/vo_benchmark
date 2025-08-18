@@ -9,9 +9,9 @@ cors:
   allow_credentials: true
 
 storage:
-  datasets_root: "/data/datasets"
-  results_root: "/data/results"
-  temp_root: "/tmp/vo_benchmark"
+  datasets_root: "./data/datasets"
+  results_root: "./data/results"
+  temp_root: "./data/tmp"
 
 experiment:
   default_num_runs: 1
@@ -30,8 +30,69 @@ experiment:
     symmetric_mad:
       mad_k: 3.0
 
-  supported_feature_types: ["SIFT", "ORB", "AKAZE", "BRISK", "KAZE", "SURF"]
-  supported_ransac_types: ["STANDARD", "PROSAC", "USAC_DEFAULT", "USAC_MAGSAC", "USAC_ACCURATE", "RHO", "LMEDS"]
+  # 算法支持现在通过动态发现机制确定，不再硬编码
+  # supported_feature_types: 由动态配置管理器自动发现
+  # supported_ransac_types: 由动态配置管理器自动发现
+
+  # 图表配置参数
+  chart_config:
+    pr_curve:
+      max_frames: 1000
+      max_samples: 3000
+      cache_ttl: 300
+    trajectory:
+      max_frames: 500
+      cache_ttl: 300
+    metrics:
+      cache_ttl: 300
+
+
+  # 默认算法参数（集中管理，可被环境覆盖）
+  algorithms_defaults:
+    features:
+      SIFT:
+        matcher:
+          matcher_type: flann
+          ratio_threshold: 0.75
+          algorithm: kdtree
+          index_params: { algorithm: 1, trees: 5 }
+          search_params: { checks: 50 }
+      ORB:
+        matcher:
+          matcher_type: bf
+          normType: NORM_HAMMING
+          crossCheck: true
+          ratio_threshold: 0.75
+      AKAZE:
+        matcher:
+          matcher_type: flann
+          algorithm: lsh
+          index_params: { algorithm: 6, table_number: 6, key_size: 12, multi_probe_level: 1 }
+          search_params: { checks: 50 }
+          ratio_threshold: 0.75
+      BRISK:
+        matcher:
+          matcher_type: bf
+          normType: NORM_HAMMING
+          crossCheck: true
+          ratio_threshold: 0.75
+      KAZE:
+        matcher:
+          matcher_type: flann
+          algorithm: kdtree
+          index_params: { algorithm: 1, trees: 5 }
+          search_params: { checks: 50 }
+          ratio_threshold: 0.75
+      SURF:
+        matcher:
+          matcher_type: flann
+          algorithm: kdtree
+          index_params: { algorithm: 1, trees: 5 }
+          search_params: { checks: 50 }
+          ratio_threshold: 0.75
+    ransac:
+      STANDARD: { threshold: 1.0, confidence: 0.999, max_iters: 2000, method: RANSAC }
+      PROSAC: { threshold: 1.0, confidence: 0.999, max_iters: 2000, method: USAC_PROSAC }
 
 logging:
   level: INFO

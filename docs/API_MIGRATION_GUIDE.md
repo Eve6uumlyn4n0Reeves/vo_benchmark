@@ -11,8 +11,8 @@ The VO-Benchmark API has been restructured to resolve route conflicts and provid
 These endpoints are fully documented with OpenAPI/Swagger and should be used for all new integrations:
 
 - **Documentation**: `/api/v1/docs/` - Interactive API explorer
-- **Experiments**: `/api/v1/experiments/` - Experiment management (documented)
-- **Health**: `/api/v1/health/` - System health checks (documented)
+- **Experiments**: `/api/v1/experiments-doc/` - Experiment management (documented)
+- **Health**: `/api/v1/health-doc/` - System health checks (documented)
 - **Configuration**: `/api/v1/config/` - System configuration (documented)
 
 ### Legacy API Endpoints (Deprecated)

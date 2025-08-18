@@ -42,7 +42,7 @@ class TestAPI:
     
     def test_health_check(self, client):
         """测试健康检查接口"""
-        response = client.get('/api/v1/health/')
+        response = client.get('/api/v1/health-doc/')
         assert response.status_code == 200
         
         data = json.loads(response.data)
@@ -53,18 +53,18 @@ class TestAPI:
     
     def test_detailed_health_check(self, client):
         """测试详细健康检查接口"""
-        response = client.get('/api/v1/health/detailed')
+        response = client.get('/api/v1/health-doc/detailed')
         assert response.status_code == 200
         
         data = json.loads(response.data)
         assert data['status'] in ['healthy', 'degraded']
-        assert 'system' in data
+        assert 'system_metrics' in data
         assert 'dependencies' in data
     
     def test_create_experiment_validation(self, client):
         """测试创建实验的数据验证"""
         # 测试缺少必需字段
-        response = client.post('/api/v1/experiments/', 
+        response = client.post('/api/v1/experiments-doc/',
                              json={}, 
                              content_type='application/json')
         assert response.status_code == 400
@@ -80,12 +80,12 @@ class TestAPI:
             "num_runs": 1
         }
         
-        response = client.post('/api/v1/experiments/', 
+        response = client.post('/api/v1/experiments-doc/',
                              json=invalid_data, 
                              content_type='application/json')
         assert response.status_code == 400
     
-    @patch('src.api.routes.experiments.experiment_service.create_experiment')
+    @patch('src.api.routes.experiments_documented.ExperimentService.create_experiment')
     def test_create_experiment_success(self, mock_create, client, temp_dir):
         """测试成功创建实验"""
         # 创建测试数据集目录
@@ -93,12 +93,24 @@ class TestAPI:
         dataset_dir.mkdir()
         
         # 模拟服务返回
-        mock_response = Mock()
-        mock_response.dict.return_value = {
-            "experiment_id": "test_exp_123",
-            "task_id": "task_456"
-        }
-        mock_create.return_value = mock_response
+        from types import SimpleNamespace
+        # 返回一个具有 model_dump()/dict() 两种兼容方法的简单对象
+        task_obj = SimpleNamespace(
+            experiment_id="test_exp_123",
+            task_id="task_456",
+            status="pending",
+            progress=0.0,
+            created_at="2024-01-01T00:00:00Z",
+        )
+        setattr(task_obj, "model_dump", lambda: {
+            "experiment_id": task_obj.experiment_id,
+            "task_id": task_obj.task_id,
+            "status": task_obj.status,
+            "progress": task_obj.progress,
+            "created_at": task_obj.created_at,
+        })
+        setattr(task_obj, "dict", lambda: task_obj.model_dump())
+        mock_create.return_value = task_obj
         
         valid_data = {
             "name": "test_experiment",
@@ -110,29 +122,37 @@ class TestAPI:
             "num_runs": 1
         }
         
-        response = client.post('/api/v1/experiments/', 
+        response = client.post('/api/v1/experiments-doc/',
                              json=valid_data, 
                              content_type='application/json')
         assert response.status_code == 201
         
         data = json.loads(response.data)
-        assert data['experiment_id'] == "test_exp_123"
-        assert data['task_id'] == "task_456"
+        assert data['experiment']['experiment_id'] == "test_exp_123"
+        assert data['task']['task_id'] == "task_456"
     
-    @patch('src.api.routes.experiments.experiment_service.list_experiments')
+    @patch('src.api.routes.experiments_documented.ExperimentService.list_experiments')
     def test_list_experiments(self, mock_list_experiments, client):
         """测试列出实验"""
         # 模拟服务返回
-        mock_experiment = Mock()
-        mock_experiment.dict.return_value = {
-            "experiment_id": "exp1",
-            "name": "Test Experiment 1",
-            "status": "COMPLETED",
-            "created_at": "2023-01-01T00:00:00"
-        }
-        mock_list_experiments.return_value = [mock_experiment]
+        # 返回列表，元素为具有 dict()/model_dump() 的对象
+        from types import SimpleNamespace
+        exp_obj = SimpleNamespace(
+            experiment_id="exp1",
+            name="Test Experiment 1",
+            status="COMPLETED",
+            created_at="2023-01-01T00:00:00Z",
+        )
+        setattr(exp_obj, "model_dump", lambda: {
+            "experiment_id": exp_obj.experiment_id,
+            "name": exp_obj.name,
+            "status": exp_obj.status,
+            "created_at": exp_obj.created_at,
+        })
+        setattr(exp_obj, "dict", lambda: exp_obj.model_dump())
+        mock_list_experiments.return_value = [exp_obj]
         
-        response = client.get('/api/v1/experiments/')
+        response = client.get('/api/v1/experiments-doc/')
         assert response.status_code == 200
         
         data = json.loads(response.data)
@@ -143,23 +163,27 @@ class TestAPI:
     
     @patch('src.api.routes.tasks.task_service.get_task')
     def test_get_task_status(self, mock_get_task, client):
-        """测试获取任务状态"""
+        """测试获取任务状态
+
+        注意：TaskStatus 使用小写值输出（pending/running/completed/failed/cancelled）
+        这是因为 TaskResponse 使用 ConfigDict(use_enum_values=True) 导致枚举以字符串值输出
+        """
         # 模拟服务返回
         mock_task = Mock()
         mock_task.dict.return_value = {
             "task_id": "task_123",
-            "status": "RUNNING",
+            "status": "running",
             "progress": 0.5,
             "message": "Processing frames..."
         }
         mock_get_task.return_value = mock_task
-        
+
         response = client.get('/api/v1/tasks/task_123')
         assert response.status_code == 200
-        
+
         data = json.loads(response.data)
         assert data['task_id'] == "task_123"
-        assert data['status'] == "RUNNING"
+        assert data['status'] == "running"
         assert data['progress'] == 0.5
     
     def test_get_nonexistent_task(self, client):
@@ -169,7 +193,7 @@ class TestAPI:
     
     def test_cors_headers(self, client):
         """测试CORS头部"""
-        response = client.options('/api/v1/health/')
+        response = client.options('/api/v1/health-doc/')
         assert response.status_code == 200
         assert 'Access-Control-Allow-Origin' in response.headers
     
@@ -187,7 +211,7 @@ class TestAPI:
     def test_request_validation_middleware(self, client):
         """测试请求验证中间件"""
         # 测试无效的JSON
-        response = client.post('/api/v1/experiments/', 
+        response = client.post('/api/v1/experiments-doc/',
                              data='invalid json', 
                              content_type='application/json')
         assert response.status_code == 400
@@ -233,7 +257,7 @@ class TestAPIIntegration:
         results = []
         
         def make_request():
-            response = client.get('/api/v1/health/')
+            response = client.get('/api/v1/health-doc/')
             results.append(response.status_code)
         
         # 创建多个线程同时发送请求

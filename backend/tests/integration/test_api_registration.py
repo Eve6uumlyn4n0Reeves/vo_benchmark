@@ -28,7 +28,7 @@ class TestAPIRegistration:
 
     def test_health_endpoint_basic(self):
         """测试基本健康检查端点"""
-        response = self.client.get("/api/v1/health/")
+        response = self.client.get("/api/v1/health-doc/")
 
         # 验证响应状态
         assert response.status_code == 200
@@ -66,13 +66,13 @@ class TestAPIRegistration:
 
     def test_cors_headers(self):
         """测试CORS头设置"""
-        response = self.client.get("/api/v1/health/")
+        response = self.client.get("/api/v1/health-doc/")
 
         # 验证CORS头存在
         assert "Access-Control-Allow-Origin" in response.headers
 
         # 测试OPTIONS请求
-        options_response = self.client.options("/api/v1/health/")
+        options_response = self.client.options("/api/v1/health-doc/")
         assert options_response.status_code in [200, 204]
         assert "Access-Control-Allow-Methods" in options_response.headers
 
@@ -94,7 +94,7 @@ class TestAPIRegistration:
 
     def test_security_headers(self):
         """测试安全头设置"""
-        response = self.client.get("/api/v1/health/")
+        response = self.client.get("/api/v1/health-doc/")
 
         # 验证安全头
         assert response.headers.get("X-Content-Type-Options") == "nosniff"
@@ -104,7 +104,7 @@ class TestAPIRegistration:
     def test_json_error_responses(self):
         """测试JSON错误响应一致性"""
         # 测试方法不允许的错误
-        response = self.client.post("/api/v1/health/")  # health端点通常只支持GET
+        response = self.client.post("/api/v1/health-doc/")  # health端点通常只支持GET
 
         # 验证响应是JSON格式（即使是错误）
         if response.status_code in [405, 404]:  # Method Not Allowed 或 Not Found
@@ -179,7 +179,7 @@ class TestAPIRegistration:
         with self.app.test_request_context():
             self.app.config["LOG_REQUESTS"] = True
             
-            response = self.client.get("/api/v1/health/")
+            response = self.client.get("/api/v1/health-doc/")
 
             # 验证响应成功
             assert response.status_code == 200
@@ -209,7 +209,7 @@ class TestAPIRegistration:
         # 测试多个不同的错误端点，确保错误格式一致
         error_endpoints = [
             "/api/v1/nonexistent",
-            "/api/v1/experiments/nonexistent",
+            "/api/v1/experiments-doc/nonexistent",
             "/api/v1/results/nonexistent"
         ]
         
@@ -263,7 +263,7 @@ class TestAPIRegistration:
     def test_api_consistency_across_endpoints(self):
         """测试API端点间的一致性"""
         endpoints = [
-            "/api/v1/health/",
+            "/api/v1/health-doc/",
             "/api/v1/experiments-doc/",
             "/api/v1/tasks/",
         ]

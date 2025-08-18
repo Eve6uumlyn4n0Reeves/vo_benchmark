@@ -19,6 +19,8 @@ from typing import Dict, List, Any
 
 from flask import Blueprint, current_app, jsonify, request
 
+from src.datasets.factory import DatasetFactory
+
 bp = Blueprint("datasets", __name__, url_prefix="/api/v1/datasets")
 
 
@@ -44,37 +46,55 @@ def _get_scan_roots() -> List[Path]:
 
 
 def _detect_dataset_format(d: Path) -> str:
-    # Heuristics: TUM style
-    if (d / "rgb.txt").exists() and (d / "depth.txt").exists():
-        return "TUM"
-    # EuRoC
-    if (d / "mav0").exists():
-        return "EuRoC"
-    # KITTI (very rough)
-    if any((d / name).exists() for name in ["image_0", "image_1", "image_2", "image_3"]):
-        return "KITTI"
-    return "Custom"
+    """使用数据集工厂检测格式"""
+    return DatasetFactory.detect_dataset_type(d)
 
 
 def _to_dataset_entry(d: Path) -> Dict[str, Any]:
+    """创建数据集条目，包含实际的帧数信息"""
     fmt = _detect_dataset_format(d)
     has_gt = (d / "groundtruth.txt").exists() or (d / "poses.txt").exists()
-    # Treat each dataset directory as a single-sequence dataset by default
+
+    # 使用数据集工厂获取实际信息
+    total_frames = 0
+    sequences_info = []
+    format_valid = True
+
+    try:
+        dataset = DatasetFactory.create_dataset(d)
+        sequences = dataset.get_sequences()
+
+        for seq in sequences:
+            frame_count = dataset.get_frame_count(seq)
+            total_frames += frame_count
+            sequences_info.append({
+                "name": seq,
+                "path": str(d.resolve()),
+                "frames": frame_count,
+            })
+
+        # 验证数据集
+        validation = dataset.validate()
+        format_valid = validation["valid"]
+
+    except Exception as e:
+        # 如果无法加载数据集，使用默认值
+        sequences_info = [{
+            "name": d.name,
+            "path": str(d.resolve()),
+            "frames": 0,
+        }]
+        format_valid = False
+
     entry = {
         "name": d.name,
         "path": str(d.resolve()),
         "format": fmt,
         "type": fmt,
         "description": None,
-        "total_frames": 0,
-        "sequences": [
-            {
-                "name": d.name,
-                "path": str(d.resolve()),
-                "frames": 0,
-            }
-        ],
-        "format_valid": True,
+        "total_frames": total_frames,
+        "sequences": sequences_info,
+        "format_valid": format_valid,
         "last_modified": None,
         "has_groundtruth": has_gt,
     }
@@ -150,35 +170,31 @@ def list_datasets():
 
 @bp.route("/validate", methods=["POST"])
 def validate_dataset():
+    """验证数据集路径和格式"""
     data = request.get_json(force=True) or {}
-    path = Path(str(data.get("path", "")).strip())
-    resp: Dict[str, Any] = {
-        "valid": False,
-        "dataset_type": None,
-        "issues": [],
-        "suggestions": [],
-        "statistics": {},
-    }
-    if not path:
-        resp["issues"].append("路径不能为空")
-        return jsonify(resp), 400
-    if not path.exists():
-        resp["issues"].append(f"路径不存在: {path}")
-        return jsonify(resp), 200
+    path_str = str(data.get("path", "")).strip()
 
-    fmt = _detect_dataset_format(path)
-    resp["dataset_type"] = fmt
-    # Basic checks
-    if fmt == "TUM":
-        required = ["rgb.txt", "depth.txt"]
-        missing = [f for f in required if not (path / f).exists()]
-        if missing:
-            resp["issues"].append(f"缺少必要文件: {missing}")
-        else:
-            resp["valid"] = True
-    else:
-        # For non-TUM, treat as custom but existent
-        resp["valid"] = True
+    if not path_str:
+        return jsonify({
+            "valid": False,
+            "dataset_type": None,
+            "issues": ["路径不能为空"],
+            "suggestions": ["请提供有效的数据集路径"],
+            "statistics": {},
+        }), 400
 
-    return jsonify(resp), 200
+    path = Path(path_str)
+
+    # 使用数据集工厂进行验证
+    try:
+        result = DatasetFactory.validate_dataset_path(path)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({
+            "valid": False,
+            "dataset_type": "Unknown",
+            "issues": [f"验证失败: {e}"],
+            "suggestions": ["请检查数据集路径和格式"],
+            "statistics": {},
+        }), 200
 

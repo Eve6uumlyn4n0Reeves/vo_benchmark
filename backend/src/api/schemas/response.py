@@ -4,7 +4,7 @@
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from src.models.types import TaskStatus, ErrorCode
+from src.models.types import TaskStatus, ExperimentStatus, ErrorCode
 
 
 class PaginationInfo(BaseModel):
@@ -21,6 +21,7 @@ class PaginationInfo(BaseModel):
 class TaskResponse(BaseModel):
     """任务响应"""
 
+    model_config = ConfigDict(use_enum_values=True)
 
     task_id: str = Field(..., description="任务ID")
     status: TaskStatus = Field(..., description="任务状态")
@@ -76,7 +77,7 @@ class ExperimentResponse(BaseModel):
     experiment_id: str = Field(..., description="实验ID")
     name: str = Field(..., description="实验名称")
     description: Optional[str] = Field(None, description="实验描述")
-    status: TaskStatus = Field(..., description="实验状态")
+    status: ExperimentStatus = Field(..., description="实验状态")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
     completed_at: Optional[datetime] = Field(None, description="完成时间")
@@ -117,7 +118,10 @@ class RANSACMetricsResponse(BaseModel):
 
     avg_iterations: float = Field(..., description="平均迭代次数")
     std_iterations: float = Field(..., description="迭代次数标准差")
+    min_iterations: int = Field(..., description="最小迭代次数")
+    max_iterations: int = Field(..., description="最大迭代次数")
     convergence_rate: float = Field(..., description="收敛率")
+    avg_inlier_ratio: float = Field(..., description="平均内点比例(参与RANSAC帧)")
     success_rate: float = Field(..., description="成功率")
     avg_processing_time_ms: float = Field(..., description="平均处理时间(毫秒)")
 
@@ -140,6 +144,8 @@ class AlgorithmMetricsResponse(BaseModel):
     total_frames: int = Field(..., description="总帧数")
     successful_frames: int = Field(..., description="成功帧数")
     failed_frames: int = Field(default=0, description="失败帧数")
+    metrics_schema_version: str = Field('1.1', description='指标契约版本')
+    source_flags: Dict[str, str] = Field(default_factory=dict, description='数据来源标记，如匹配分数/重投影是否存在')
     failure_reasons: Dict[str, int] = Field(
         default_factory=dict, description="失败原因计数"
     )

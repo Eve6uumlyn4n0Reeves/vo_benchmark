@@ -15,6 +15,6 @@ server:
   host: 0.0.0.0
   port: 5000
 storage:
-  # 团队统一的绝对路径（请按需调整到团队标准路径）
-  results_root: C:/Users/jyj20/Desktop/VO/vo-benchmark/backend/results
+  # 使用相对路径，ConfigManager 会在运行时规范化为项目根下的绝对路径
+  results_root: ./results
 

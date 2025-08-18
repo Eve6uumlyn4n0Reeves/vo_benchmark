@@ -78,6 +78,7 @@ Experiment（响应模型摘要）
 
 TaskResponse
 - task_id, status, message, progress, current_step?, total_steps?, experiment_id?, created_at, updated_at, completed_at?, error_details?, estimated_remaining_time?
+- 注意：TaskStatus 输出为小写字符串（pending/running/completed/failed/cancelled），与 ExperimentStatus 大写不同
 
 Pagination
 - page, limit, total, total_pages, has_next, has_previous
@@ -113,8 +114,10 @@ AlgorithmResultResponse（摘要）
 AlgorithmMetricsResponse
 - trajectory?: TrajectoryMetricsResponse
 - matching: { avg_matches, avg_inliers, avg_inlier_ratio, avg_match_score, avg_reprojection_error }
-- ransac: { avg_iterations, std_iterations, convergence_rate, success_rate, avg_processing_time_ms }
+- ransac: { avg_iterations, std_iterations, min_iterations, max_iterations, convergence_rate, avg_inlier_ratio, success_rate, avg_processing_time_ms }
 - avg_frame_time_ms, total_time_s, fps, success_rate, total_frames, successful_frames, failed_frames, failure_reasons{}
+- metrics_schema_version: '1.1'
+- source_flags: { match_scores: 'present'|'absent', reprojection: 'present'|'absent' }
 
 PRCurveResponse
 - algorithm, precisions[], recalls[], thresholds[], auc_score, optimal_threshold, optimal_precision, optimal_recall, f1_scores[], max_f1_score
@@ -128,7 +131,7 @@ FrameResultsResponse
 - 通用错误：返回 { error: "内部服务器错误" }，HTTP 500
 
 ## 任务 Tasks
-- 列表 GET /api/v1/tasks/?status=CREATED|RUNNING|COMPLETED|FAILED|CANCELLED
+- 列表 GET /api/v1/tasks/?status=pending|running|completed|failed|cancelled
   - 200 OK: TaskResponse[]
 - 详情 GET /api/v1/tasks/{task_id}
   - 200 OK: TaskResponse

@@ -5,7 +5,7 @@ import { Box, CircularProgress } from '@mui/material';
 // Lazy load pages for better performance
 const ExperimentsPage = React.lazy(() => import('@/features/experiments/pages/ExperimentsPage'));
 const ExperimentDetailPage = React.lazy(() => import('@/features/experiments/pages/ExperimentDetailPage'));
-const ResultsPage = React.lazy(() => import('@/features/results/pages/ResultsPageNew'));
+const ResultsPage = React.lazy(() => import('@/features/results/pages/ResultsPage'));
 const TasksPage = React.lazy(() => import('@/features/tasks/pages/TasksPage'));
 const TaskDetailPage = React.lazy(() => import('@/features/tasks/pages/TaskDetailPage'));
 const HealthPage = React.lazy(() => import('@/features/health/pages/HealthPage'));

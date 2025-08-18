@@ -11,7 +11,7 @@
 ```bash
 # 克隆仓库
 git clone https://github.com/Eve6uumlyn4n0Reeves/vo_benchmark.git
-cd vo_benchmark
+cd <PROJECT_ROOT>  # 请替换为你本地仓库的实际路径
 
 # 启动服务
 docker compose up --build -d
@@ -55,7 +55,7 @@ docker compose up --build -d
 
 ```bash
 # 进入后端目录
-cd backend
+cd <PROJECT_ROOT>/backend
 
 # 创建虚拟环境
 python -m venv .venv
@@ -82,7 +82,7 @@ python start_server.py
 
 ```bash
 # 进入前端目录
-cd frontend
+cd <PROJECT_ROOT>/frontend
 
 # 安装依赖
 npm install
@@ -138,7 +138,7 @@ docker compose ps
 docker compose logs -f
 
 # 健康检查
-curl http://localhost:5000/api/v1/health
+curl http://localhost:5000/api/v1/health-doc/
 ```
 
 ### 使用 Nginx 反向代理
@@ -240,13 +240,13 @@ export DATASET_PATHS="/data/datasets/TUM:/data/datasets/KITTI:/data/custom"
 
 ```bash
 # 基础健康检查
-curl http://localhost:5000/api/v1/health
+curl http://localhost:5000/api/v1/health-doc/
 
 # 详细健康检查
-curl http://localhost:5000/api/v1/health/detailed
+curl http://localhost:5000/api/v1/health-doc/detailed
 
 # 就绪检查
-curl http://localhost:5000/api/v1/health/ready
+curl http://localhost:5000/api/v1/health-doc/ready
 ```
 
 ### 日志管理

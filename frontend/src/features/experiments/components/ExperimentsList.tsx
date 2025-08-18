@@ -51,13 +51,14 @@ const ExperimentCard: React.FC<ExperimentCardProps> = ({ experiment, onDelete })
 
   // Check if results are ready for viewing: use backend diagnostics
   const isExperimentCompleted = experiment.status === 'COMPLETED';
-  const { data: diag } = useResultsDiagnostics(experiment.experiment_id);
+  const { data: diag, isLoading: diagLoading } = useResultsDiagnostics(experiment.experiment_id);
   const resultReady = React.useMemo(() => {
     if (!isExperimentCompleted) return false;
     const p = (diag as any)?.per_algorithm || {};
     return Object.values(p).some((v: any) => v && (v as any).metrics_exists);
   }, [isExperimentCompleted, diag])
-  const showResultsNotReady = isExperimentCompleted && !resultReady;
+  // 避免闪烁：仅在诊断已返回且明确不可用时显示“结果未就绪”
+  const showResultsNotReady = isExperimentCompleted && !diagLoading && !resultReady;
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setMenuAnchorEl(event.currentTarget);
@@ -147,10 +148,11 @@ const ExperimentCard: React.FC<ExperimentCardProps> = ({ experiment, onDelete })
             配置概要
           </Typography>
           <Typography variant="body2">
-            {experiment.config.feature_types.join(', ')} × {experiment.config.ransac_types.join(', ')}
+            特征({experiment.config.feature_types.length}) × 估计({experiment.config.ransac_types.length})
+            = 组合 {experiment.config.feature_types.length * experiment.config.ransac_types.length}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {experiment.config.sequences.length} 序列 · {experiment.config.num_runs} 次运行
+            序列 {experiment.config.sequences.length} × 次数 {experiment.config.num_runs}
           </Typography>
         </Box>
 

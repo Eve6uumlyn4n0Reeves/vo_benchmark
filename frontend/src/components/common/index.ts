@@ -17,3 +17,4 @@ export {
 export { ErrorState } from './ErrorState';
 export { PaginationControls } from './PaginationControls';
 export { ConfirmDialog } from './ConfirmDialog';
+export { ProgressBar01 } from './ProgressBar01';

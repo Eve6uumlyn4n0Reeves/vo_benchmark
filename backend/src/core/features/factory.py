@@ -140,8 +140,16 @@ class FeatureFactory:
                         "ratio_threshold": 0.75,
                     }
 
+            # 从集中配置读取特定 feature 的默认 matcher 参数并合并（优先级：factory内置 < 配置文件 < 调用者传入）
+            try:
+                from src.config.manager import get_config
+                algo_defaults = (get_config().experiment.algorithms_defaults or {}).get("features", {})
+                feature_defaults = (algo_defaults.get(feature_type.value, {}) or {}).get("matcher", {})
+            except Exception:
+                feature_defaults = {}
+
             # 合并配置
-            final_config = {**default_config, **config}
+            final_config = {**default_config, **feature_defaults, **config}
 
             # 创建匹配器
             if matcher_type in ["bf", "brute_force"]:

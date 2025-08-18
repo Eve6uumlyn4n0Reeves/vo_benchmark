@@ -8,7 +8,7 @@ from datetime import datetime
 from src.api.schemas.request import CreateExperimentRequest
 from src.api.schemas.response import TaskResponse, ExperimentResponse
 from src.models.experiment import ExperimentConfig, ExperimentSummary
-from src.models.types import FeatureType, RANSACType, TaskStatus
+from src.models.types import FeatureType, RANSACType, TaskStatus, ExperimentStatus
 from src.storage.experiment import ExperimentStorage
 from src.storage.filesystem import FileSystemStorage
 from src.api.exceptions.base import ExperimentNotFoundError, ValidationError
@@ -18,6 +18,18 @@ from src.api.services.events import event_bus
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _task_status_to_experiment_status(task_status: TaskStatus) -> ExperimentStatus:
+    """将任务状态转换为实验状态"""
+    mapping = {
+        TaskStatus.PENDING: ExperimentStatus.CREATED,
+        TaskStatus.RUNNING: ExperimentStatus.RUNNING,
+        TaskStatus.COMPLETED: ExperimentStatus.COMPLETED,
+        TaskStatus.FAILED: ExperimentStatus.FAILED,
+        TaskStatus.CANCELLED: ExperimentStatus.CANCELLED,
+    }
+    return mapping.get(task_status, ExperimentStatus.CREATED)
 
 
 class ExperimentService:
@@ -383,7 +395,7 @@ class ExperimentService:
             logger.error(f"获取实验列表失败: {e}")
             raise
 
-    def _determine_experiment_status(self, experiment_id: str) -> TaskStatus:
+    def _determine_experiment_status(self, experiment_id: str) -> ExperimentStatus:
         """确定实验的真实状态"""
         try:
             from src.api.services.task import task_service
@@ -392,7 +404,7 @@ class ExperimentService:
             active_tasks = task_service.get_active_tasks()
             for task in active_tasks:
                 if task.experiment_id == experiment_id:
-                    return task.status
+                    return _task_status_to_experiment_status(task.status)
 
             # 检查实验是否有完整的结果数据
             experiment = self.experiment_storage.get_experiment(experiment_id)
@@ -400,30 +412,30 @@ class ExperimentService:
                 # 检查实验摘要中的成功/失败统计
                 if hasattr(experiment, "successful_runs") and hasattr(experiment, "failed_runs"):
                     if experiment.successful_runs > 0 and experiment.failed_runs == 0:
-                        return TaskStatus.COMPLETED
+                        return ExperimentStatus.COMPLETED
                     elif experiment.failed_runs > 0:
-                        return TaskStatus.FAILED
+                        return ExperimentStatus.FAILED
 
                 # 备用方案：检查是否有任何算法结果
                 try:
                     all_results = self.experiment_storage.get_all_algorithm_results(experiment_id)
                     if all_results and len(all_results) > 0:
-                        return TaskStatus.COMPLETED
+                        return ExperimentStatus.COMPLETED
                     else:
-                        return TaskStatus.FAILED
+                        return ExperimentStatus.FAILED
                 except Exception:
                     # 如果无法获取结果，检查是否有算法测试记录
                     if hasattr(experiment, "algorithms_tested") and experiment.algorithms_tested:
-                        return TaskStatus.COMPLETED
+                        return ExperimentStatus.COMPLETED
                     else:
-                        return TaskStatus.FAILED
+                        return ExperimentStatus.FAILED
 
             # 默认状态
-            return TaskStatus.COMPLETED
+            return ExperimentStatus.COMPLETED
 
         except Exception as e:
             logger.warning(f"确定实验状态失败 {experiment_id}: {e}")
-            return TaskStatus.COMPLETED
+            return ExperimentStatus.COMPLETED
 
     def _get_experiment_completion_time(self, experiment_id: str) -> Optional[datetime]:
         """获取实验完成时间"""

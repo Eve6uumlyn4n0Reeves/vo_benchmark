@@ -62,8 +62,14 @@ class CreateExperimentRequest(BaseModel):
     @field_validator("dataset_path")
     def validate_dataset_path(cls, v):
         """验证数据集路径"""
-        if not os.path.exists(v):
-            raise ValueError(f"数据集路径不存在: {v}")
+        try:
+            path = Path(v).resolve()
+            if not path.exists():
+                raise ValueError(f"数据集路径不存在: {v}")
+            if not path.is_dir():
+                raise ValueError(f"数据集路径必须是目录: {v}")
+        except Exception as e:
+            raise ValueError(f"数据集路径无效: {v} ({e})")
         return v
 
     @field_validator("name")

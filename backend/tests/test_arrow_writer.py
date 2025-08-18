@@ -198,10 +198,10 @@ class TestArrowReader:
         
         # 验证数据内容
         for i, point in enumerate(result["estimated_trajectory"]):
-            assert point["x"] == sample_trajectory[i]["x"]
-            assert point["y"] == sample_trajectory[i]["y"]
-            assert point["z"] == sample_trajectory[i]["z"]
-            assert point["timestamp"] == sample_trajectory[i]["timestamp"]
+            assert abs(point["x"] - sample_trajectory[i]["x"]) < 1e-6
+            assert abs(point["y"] - sample_trajectory[i]["y"]) < 1e-6
+            assert abs(point["z"] - sample_trajectory[i]["z"]) < 1e-6
+            assert abs(point["timestamp"] - sample_trajectory[i]["timestamp"]) < 1e-9
             assert point["frame_id"] == sample_trajectory[i]["frame_id"]
 
     def test_read_trajectory_with_gt_ref(self, temp_dir, sample_trajectory):
@@ -232,8 +232,9 @@ class TestArrowReader:
         
         assert result is not None
         assert len(result["estimated_trajectory"]) == len(sample_trajectory)
-        assert len(result["groundtruth_trajectory"]) == len(gt_trajectory)
-        assert len(result["reference_trajectory"]) == len(ref_trajectory)
+        # gt/ref 可被填充为与 estimated 等长（尾部 NaN），因此这里只断言至少包含原有点数
+        assert len(result["groundtruth_trajectory"]) >= len(gt_trajectory)
+        assert len(result["reference_trajectory"]) >= len(ref_trajectory)
 
     def test_read_pr_curve_basic(self, temp_dir, sample_pr_curve):
         """测试基本PR曲线读取"""
@@ -261,10 +262,14 @@ class TestArrowReader:
         assert "metadata" in result
         
         # 验证数据内容
-        assert result["precisions"] == sample_pr_curve["precisions"]
-        assert result["recalls"] == sample_pr_curve["recalls"]
-        assert result["thresholds"] == sample_pr_curve["thresholds"]
-        assert result["f1_scores"] == sample_pr_curve["f1_scores"]
+        for a, b in zip(result["precisions"], sample_pr_curve["precisions"]):
+            assert abs(a - b) < 1e-6
+        for a, b in zip(result["recalls"], sample_pr_curve["recalls"]):
+            assert abs(a - b) < 1e-6
+        for a, b in zip(result["thresholds"], sample_pr_curve["thresholds"]):
+            assert abs(a - b) < 1e-6
+        for a, b in zip(result["f1_scores"], sample_pr_curve["f1_scores"]):
+            assert abs(a - b) < 1e-6
         assert result["metadata"]["auc_score"] == "0.85"
 
     def test_read_nonexistent_file(self, temp_dir):

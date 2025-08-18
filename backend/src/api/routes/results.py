@@ -140,7 +140,7 @@ def get_pr_curve(experiment_id: str, algorithm_key: str):
         return jsonify(e.to_dict()), e.status_code
     except Exception as e:
         logger.error(f"获取PR曲线内部错误: {e}")
-        return jsonify({"error": "内部服务器错误"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @bp.route("/<string:experiment_id>/<string:algorithm_key>/trajectory", methods=["GET"])

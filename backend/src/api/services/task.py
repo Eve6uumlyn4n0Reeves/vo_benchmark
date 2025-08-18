@@ -2,7 +2,7 @@
 # 功能: 提供任务管理的业务逻辑服务。
 #
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import threading
 import logging
@@ -10,6 +10,7 @@ from src.api.schemas.response import TaskResponse
 from src.models.types import TaskStatus, ErrorCode
 from src.api.exceptions.base import TaskNotFoundError
 from src.api.services.events import event_bus
+from src.api.services.event_types import EVENT_TASK_UPDATED, EVENT_TASK_LOG
 from src.api.services.inmemory_impl import InMemoryTaskBackend
 from src.api.services.interfaces import ITaskBackend
 
@@ -42,7 +43,7 @@ class TaskService:
             try:
                 event_bus.publish(
                     {
-                        "type": "task_updated",
+                        "type": EVENT_TASK_UPDATED,
                         "data": {
                             "task_id": updated_task.task_id,
                             "status": getattr(updated_task.status, "value", str(updated_task.status)),
@@ -111,11 +112,11 @@ class TaskService:
             # 推送日志事件
             event_bus.publish(
                 {
-                    "type": "task_log",
+                    "type": EVENT_TASK_LOG,
                     "data": {
                         "task_id": task_id,
                         "line": log_line,
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                     },
                 }
             )

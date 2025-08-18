@@ -124,7 +124,7 @@ export const TaskResponseSchema = z.object({
   message: z.string().nullable().optional().default(''),
   // backend uses 0.0..1.0 for progress
   progress: z.number().min(0).max(1).nullable().optional().default(0),
-  current_step: z.string().nullable().optional(),
+  current_step: z.union([z.number().int(), z.string()]).nullable().optional(),
   total_steps: z.number().int().min(0).nullable().optional(),
   experiment_id: z.string().nullable().optional(),
   created_at: z.string().nullable().optional().default(new Date().toISOString()),
@@ -251,7 +251,10 @@ export const MatchingMetricsSchema = z.object({
 export const RansacMetricsSchema = z.object({
   avg_iterations: z.number().min(0).optional().default(0),
   std_iterations: z.number().min(0).optional().default(0),
+  min_iterations: z.number().int().min(0).optional().default(0),
+  max_iterations: z.number().int().min(0).optional().default(0),
   convergence_rate: z.number().min(0).max(1).optional().default(0),
+  avg_inlier_ratio: z.number().min(0).max(1).optional().default(0),
   success_rate: z.number().min(0).max(1).optional().default(0),
   avg_processing_time_ms: z.number().min(0).optional().default(0),
 }).passthrough();
@@ -268,6 +271,8 @@ export const AlgorithmMetricsResponseSchema = z.object({
   total_time_s: z.number().min(0).optional().default(0),
   fps: z.number().min(0).optional().default(0),
   success_rate: z.number().min(0).max(1).optional().default(0),
+  metrics_schema_version: z.string().optional().default('1.1'),
+  source_flags: z.object({ match_scores: z.string().optional(), reprojection: z.string().optional() }).optional().default({}),
   total_frames: z.number().int().min(0).optional().default(0),
   successful_frames: z.number().int().min(0).optional().default(0),
   failed_frames: z.number().int().min(0).optional().default(0),
@@ -287,6 +292,19 @@ export const PRCurveResponseSchema = z.object({
   f1_scores: z.array(z.number().min(0).max(1)),
   max_f1_score: z.number().min(0).max(1),
 }).passthrough();
+
+// PR Curve computing state schema
+export const PRCurveComputingResponseSchema = z.object({
+  status: z.literal('computing'),
+  message: z.string(),
+  algorithm: z.string(),
+}).passthrough();
+
+// Union schema for PR curve API responses
+export const PRCurveApiResponseSchema = z.union([
+  PRCurveResponseSchema,
+  PRCurveComputingResponseSchema,
+]);
 
 export const AlgorithmResultResponseSchema = z.object({
   algorithm_key: z.string(),
@@ -360,6 +378,19 @@ export const TrajectoryResponseSchema = z
       ref: !hasGT && isRef ? gtArr : undefined,
     };
   });
+
+// Trajectory computing state schema
+export const TrajectoryComputingResponseSchema = z.object({
+  status: z.literal('computing'),
+  message: z.string(),
+  algorithm: z.string(),
+}).passthrough();
+
+// Union schema for trajectory API responses
+export const TrajectoryApiResponseSchema = z.union([
+  TrajectoryResponseSchema,
+  TrajectoryComputingResponseSchema,
+]);
 
 // =============================================================================
 // VALIDATION HELPERS

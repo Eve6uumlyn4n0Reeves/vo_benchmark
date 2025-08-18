@@ -23,6 +23,17 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# 动态配置管理器
+def _get_chart_config(chart_type: str, key: str, default_value: Any) -> Any:
+    """获取图表配置参数"""
+    try:
+        from src.config.dynamic_config import get_dynamic_config_manager
+        manager = get_dynamic_config_manager()
+        config = manager.get_chart_config(chart_type)
+        return config.get(key, default_value)
+    except ImportError:
+        return default_value
+
 
 class ResultService:
     """结果查询服务（单例模式）"""
@@ -90,13 +101,9 @@ class ResultService:
         self._frame_cache = {}  # {experiment_id/algorithm_key: (frames, timestamp)}
         self._pr_cache = {}     # {experiment_id/algorithm_key: (data, timestamp)}
         self._trajectory_cache = {}  # {experiment_id/algorithm_key/include_ref: (data, timestamp)}
-        self._cache_ttl = 300   # 5分钟缓存
 
-        # 添加内存缓存
-        self._frame_cache = {}  # {experiment_id/algorithm_key: (frames, timestamp)}
-        self._pr_cache = {}     # {experiment_id/algorithm_key: (data, timestamp)}
-        self._trajectory_cache = {}  # {experiment_id/algorithm_key: (data, timestamp)}
-        self._cache_ttl = 300   # 5分钟缓存
+        # 动态获取缓存TTL配置
+        self._cache_ttl = _get_chart_config("metrics", "cache_ttl", 300)
 
         self._initialized = True
 
@@ -120,22 +127,34 @@ class ResultService:
         if experiment is None:
             raise ExperimentNotFoundError(f"实验未找到: {experiment_id}")
 
-        # 获取算法列表：优先摘要，其次从存储扫描
+        # 获取算法列表：优先从实际存储中列举完整 algorithm_key，避免仅有 FEAT_RANSAC 的并列列表
         algorithms: List[str] = []
         try:
-            if (
-                hasattr(experiment, "algorithms_tested")
-                and experiment.algorithms_tested
-            ):
+            # 1) 直接扫描存储键（最可靠）
+            try:
+                prefix = f"experiments/{experiment_id}/algorithms/"
+                keys = self.experiment_storage._storage.list_keys(prefix)
+                algorithms = [k.replace(prefix, "") for k in keys] if keys else []
+                logger.debug(f"从存储键获取算法列表: {algorithms}")
+            except Exception as e:
+                logger.warning(f"从存储键获取算法列表失败: {e}")
+                algorithms = []
+
+            # 2) 回退：通过读取所有算法结果对象拿到 algorithm_key
+            if not algorithms:
+                try:
+                    all_results = self.experiment_storage.get_all_algorithm_results(experiment_id)
+                    algorithms = [r.algorithm_key for r in all_results] if all_results else []
+                    logger.debug(f"从算法结果对象获取算法列表: {algorithms}")
+                except Exception as e:
+                    logger.warning(f"从算法结果对象获取算法列表失败: {e}")
+
+            # 3) 再回退：使用摘要中的 algorithms_tested（注意这通常不含序列/运行号，仅作兜底展示）
+            if not algorithms and hasattr(experiment, "algorithms_tested") and experiment.algorithms_tested:
                 algorithms = list(experiment.algorithms_tested)
-            else:
-                all_results = self.experiment_storage.get_all_algorithm_results(
-                    experiment_id
-                )
-                algorithms = (
-                    [r.algorithm_key for r in all_results] if all_results else []
-                )
-        except Exception:
+                logger.debug(f"从实验摘要获取算法列表（简化版）: {algorithms}")
+        except Exception as e:
+            logger.error(f"获取算法列表失败: {e}")
             algorithms = []
 
         summary_per_algorithm: Dict[str, Any] = {}
@@ -223,25 +242,23 @@ class ResultService:
         # 列出可见键
         try:
             prefix = f"experiments/{experiment_id}"
-            keys = self.experiment_storage._storage.list_keys(prefix)
+            keys = self.experiment_storage.list_experiment_keys(prefix) if hasattr(self.experiment_storage, 'list_experiment_keys') else self.experiment_storage._storage.list_keys(prefix)
         except Exception:
             keys = []
 
-        # 解析算法
+        # 解析算法（优先从实际存储中列举完整 algorithm_key，避免 summary 中不含序列导致误判）
         algorithms: List[str] = []
         try:
-            algorithms = (
-                experiment.algorithms_tested
-                if hasattr(experiment, "algorithms_tested")
-                else []
-            )
+            # 1) 从存储接口列举
+            if hasattr(self.experiment_storage, 'list_algorithms'):
+                algorithms = self.experiment_storage.list_algorithms(experiment_id)
+            # 2) 回退：从结果对象读取 algorithm_key
             if not algorithms:
-                all_results = self.experiment_storage.get_all_algorithm_results(
-                    experiment_id
-                )
-                algorithms = (
-                    [r.algorithm_key for r in all_results] if all_results else []
-                )
+                all_results = self.experiment_storage.get_all_algorithm_results(experiment_id)
+                algorithms = [r.algorithm_key for r in all_results] if all_results else []
+            # 3) 再回退：使用 summary.algorithms_tested
+            if not algorithms and hasattr(experiment, "algorithms_tested"):
+                algorithms = list(getattr(experiment, "algorithms_tested", []) or [])
         except Exception:
             algorithms = []
 
@@ -432,9 +449,22 @@ class ResultService:
             raise
 
     def get_pr_curve(self, experiment_id: str, algorithm_key: str) -> Dict[str, Any]:
-        """获取PR曲线数据（带内存缓存与预计算优先）"""
+        """获取PR曲线数据（带内存缓存与预计算优先）- 优化版本"""
         try:
             cache_key = f"{experiment_id}/{algorithm_key}"
+
+            # 检查是否正在计算中
+            if not hasattr(self, '_pr_computing'):
+                self._pr_computing = set()
+
+            if cache_key in self._pr_computing:
+                logger.info(f"PR曲线正在计算中: {experiment_id}/{algorithm_key}")
+                return {
+                    "status": "computing",
+                    "message": "PR曲线正在计算中，请稍后重试",
+                    "algorithm": algorithm_key
+                }
+
             # 0. 内存缓存命中
             if cache_key in self._pr_cache:
                 data, ts = self._pr_cache[cache_key]
@@ -450,13 +480,11 @@ class ResultService:
                 self._pr_cache[cache_key] = (processed, time.time())
                 return processed
 
-
-            # --- Helper: postprocess PR curve (monotonize precision, optional resample) ---
-
-
-
             # 2. 如果没有预计算结果，现算（向后兼容）
             logger.info(f"预计算PR曲线不存在，开始现算: {experiment_id}/{algorithm_key}")
+
+            # 标记为计算中
+            self._pr_computing.add(cache_key)
 
             # 验证实验是否存在
             experiment = self.experiment_storage.get_experiment(experiment_id)
@@ -471,7 +499,7 @@ class ResultService:
                 raise ExperimentNotFoundError(f"算法结果未找到: {algorithm_key}")
 
             # 限制帧结果数量以提高性能，使用采样策略
-            max_frames = 1000  # 限制最大帧数
+            max_frames = _get_chart_config("pr_curve", "max_frames", 1000)
             frame_results, total = self.experiment_storage.get_frame_results(
                 experiment_id, algorithm_key, 0, max_frames
             )
@@ -490,40 +518,49 @@ class ResultService:
                 frame_results = random.sample(frame_results, 500)
                 logger.info(f"数据采样：从 {len(frame_results)} 个帧结果中采样 500 个")
 
-            # 使用真实数据计算PR曲线
-            pr_curve_data = self._calculate_pr_curve_from_frames(
-                algorithm_key, frame_results
-            )
-
-            logger.info(f"PR曲线计算完成: {experiment_id}/{algorithm_key}")
-
-            result_obj = {
-                "algorithm": pr_curve_data["algorithm"],
-                "precisions": pr_curve_data["precisions"],
-                "recalls": pr_curve_data["recalls"],
-                "thresholds": pr_curve_data["thresholds"],
-                "auc_score": pr_curve_data["auc_score"],
-                "optimal_threshold": pr_curve_data["optimal_threshold"],
-                "optimal_precision": pr_curve_data["optimal_precision"],
-                "optimal_recall": pr_curve_data["optimal_recall"],
-                "f1_scores": pr_curve_data["f1_scores"],
-                "max_f1_score": pr_curve_data["max_f1_score"],
-            }
-
-            # 3. 结果写入内存缓存与落盘（最佳努力）
             try:
-                self._pr_cache[cache_key] = (result_obj, time.time())
-                # 落盘以便二次访问命中
-                self.experiment_storage.save_pr_curve(experiment_id, algorithm_key, result_obj)
-            except Exception as e:
-                logger.warning(f"PR曲线结果缓存/落盘失败（忽略）: {e}")
+                # 使用真实数据计算PR曲线
+                pr_curve_data = self._calculate_pr_curve_from_frames(
+                    algorithm_key, frame_results
+                )
 
-            return result_obj
+                logger.info(f"PR曲线计算完成: {experiment_id}/{algorithm_key}")
+
+                result_obj = {
+                    "algorithm": pr_curve_data["algorithm"],
+                    "precisions": pr_curve_data["precisions"],
+                    "recalls": pr_curve_data["recalls"],
+                    "thresholds": pr_curve_data["thresholds"],
+                    "auc_score": pr_curve_data["auc_score"],
+                    "optimal_threshold": pr_curve_data["optimal_threshold"],
+                    "optimal_precision": pr_curve_data["optimal_precision"],
+                    "optimal_recall": pr_curve_data["optimal_recall"],
+                    "f1_scores": pr_curve_data["f1_scores"],
+                    "max_f1_score": pr_curve_data["max_f1_score"],
+                }
+
+                # 3. 结果写入内存缓存与落盘（最佳努力）
+                try:
+                    self._pr_cache[cache_key] = (result_obj, time.time())
+                    # 落盘以便二次访问命中
+                    self.experiment_storage.save_pr_curve(experiment_id, algorithm_key, result_obj)
+                except Exception as e:
+                    logger.warning(f"PR曲线结果缓存/落盘失败（忽略）: {e}")
+
+                return result_obj
+
+            finally:
+                # 移除计算中标记
+                if hasattr(self, '_pr_computing'):
+                    self._pr_computing.discard(cache_key)
 
         except Exception as e:
             logger.error(f"获取PR曲线失败: {e}", exc_info=True)
-            # 返回空的PR曲线而不是抛出异常，避免前端崩溃
-            return self._create_empty_pr_curve(algorithm_key)
+            # 确保移除计算中标记
+            if hasattr(self, '_pr_computing'):
+                self._pr_computing.discard(cache_key)
+            # 显式抛出，让路由层返回 500，便于前端识别缺依赖或数据问题
+            raise
 
     def get_trajectory_data(
         self, experiment_id: str, algorithm_key: str, include_reference: bool = False
@@ -675,8 +712,9 @@ class ResultService:
                     )
                     if algorithm_result:
                         # 获取帧结果
+                        max_frames = _get_chart_config("trajectory", "max_frames", 500)
                         frame_results, _ = self.experiment_storage.get_frame_results(
-                            experiment_id, algorithm_key, 0, 10000
+                            experiment_id, algorithm_key, 0, max_frames
                         )
 
                         algorithm_data = {
@@ -721,50 +759,64 @@ class ResultService:
     def _calculate_pr_curve_from_frames(
         self, algorithm_key: str, frame_results: List
     ) -> Dict[str, Any]:
-        """从帧结果计算PR曲线"""
+        """从帧结果计算PR曲线 - 优化版本"""
         import numpy as np
         import time
 
         start_time = time.time()
         logger.info(f"开始处理 {len(frame_results)} 个帧结果")
 
-        # 收集所有匹配数据和分数
+        # 收集所有匹配数据和分数 - 优化内存使用
         all_scores = []
         all_labels = []
         processed_frames = 0
+        max_total_points = 5000  # 限制总数据点数量
+        points_per_frame = max(1, max_total_points // len(frame_results)) if frame_results else 1
 
         for i, frame in enumerate(frame_results):
-            if i % 100 == 0 and i > 0:
-                logger.debug(f"处理进度: {i}/{len(frame_results)}")
+            if i % 200 == 0 and i > 0:
+                logger.info(f"处理进度: {i}/{len(frame_results)}, 已收集 {len(all_scores)} 个数据点")
 
             # 检查必要的数据是否存在
-            if not (
-                frame.matches and frame.matches.scores and len(frame.matches.scores) > 0
-                and frame.ransac and frame.ransac.inlier_mask
-            ):
+            if not (frame.matches and frame.ransac and frame.ransac.inlier_mask):
                 continue
+
+            # 生成匹配分数：如果有scores字段就使用，否则基于匹配数量生成
+            if frame.matches.scores and len(frame.matches.scores) > 0:
+                # 使用实际的匹配分数（距离越小越好，所以取负值）
+                frame_scores = [-score for score in frame.matches.scores]
+                num_matches = len(frame.matches.scores)
+            else:
+                # 基于匹配数量生成合成分数
+                num_matches = len(frame.ransac.inlier_mask)
+                if num_matches == 0:
+                    continue
+                # 生成递减的分数序列，模拟匹配质量
+                frame_scores = [1.0 - (j / num_matches) for j in range(num_matches)]
 
             # 确保匹配数量与inlier_mask长度一致
-            if len(frame.matches.scores) != len(frame.ransac.inlier_mask):
-                logger.warning(f"帧 {i}: 匹配数量({len(frame.matches.scores)})与inlier_mask长度({len(frame.ransac.inlier_mask)})不一致")
+            if len(frame_scores) != len(frame.ransac.inlier_mask):
+                logger.warning(f"帧 {i}: 匹配数量({len(frame_scores)})与inlier_mask长度({len(frame.ransac.inlier_mask)})不一致")
                 continue
-
-            # 使用匹配分数（距离越小越好，所以取负值）
-            frame_scores = [-score for score in frame.matches.scores]
 
             # 使用真实的inlier_mask作为标签
             frame_labels = frame.ransac.inlier_mask.copy()
 
-            # 限制每帧的匹配数量以控制内存使用
-            if len(frame_scores) > 50:
-                # 只取前50个最高分数的匹配
-                top_indices = np.argsort(frame_scores)[-50:]
-                frame_scores = [frame_scores[idx] for idx in top_indices]
-                frame_labels = [frame_labels[idx] for idx in top_indices]
+            # 智能采样：限制每帧的匹配数量
+            if len(frame_scores) > points_per_frame:
+                # 按分数排序，取最高分数的匹配点
+                sorted_indices = np.argsort(frame_scores)[-points_per_frame:]
+                frame_scores = [frame_scores[idx] for idx in sorted_indices]
+                frame_labels = [frame_labels[idx] for idx in sorted_indices]
 
             all_scores.extend(frame_scores)
             all_labels.extend(frame_labels)
             processed_frames += 1
+
+            # 早期停止：如果已经收集足够的数据点
+            if len(all_scores) >= max_total_points:
+                logger.info(f"已收集足够数据点 ({len(all_scores)})，提前停止处理")
+                break
 
         processing_time = time.time() - start_time
         logger.info(
@@ -776,15 +828,15 @@ class ResultService:
             logger.warning(f"未找到匹配分数数据: {algorithm_key}")
             return self._create_empty_pr_curve(algorithm_key)
 
-        # 如果数据点太多，进行采样以提高计算速度
-        if len(all_scores) > 2000:
+        # 最终采样：确保数据量在合理范围内
+        max_samples = _get_chart_config("pr_curve", "max_samples", 3000)
+        if len(all_scores) > max_samples:
             import random
-
             random.seed(42)
-            sampled_indices: List[int] = random.sample(range(len(all_scores)), 2000)
+            sampled_indices = random.sample(range(len(all_scores)), max_samples)
             all_scores = [all_scores[i] for i in sampled_indices]
             all_labels = [all_labels[i] for i in sampled_indices]
-            logger.info(f"数据采样：从 {len(all_scores)} 个匹配点中采样 2000 个")
+            logger.info(f"最终采样：从原始数据中采样到 {len(all_scores)} 个数据点")
 
         # 内联PR曲线计算逻辑 + 统一后处理
         raw = self._compute_pr_curve_inline(algorithm_key, all_scores, all_labels)
@@ -796,7 +848,13 @@ class ResultService:
         """使用标准 scikit-learn PR 曲线算法"""
         import numpy as np
         import time
-        from sklearn.metrics import precision_recall_curve, average_precision_score
+        try:
+            from sklearn.metrics import precision_recall_curve, average_precision_score
+        except Exception as e:
+            # 显式暴露缺依赖错误，便于前端与诊断定位
+            raise RuntimeError(
+                "PR curve computation requires scikit-learn. Please install scikit-learn>=1.3.0"
+            ) from e
 
         start_time = time.time()
         logger.info(f"开始计算PR曲线: {len(scores)} 个数据点")
@@ -1057,6 +1115,9 @@ class ResultService:
             else 0.0
         )
 
+        # Get algorithm result for success_rate
+        m = self.experiment_storage.get_algorithm_result(experiment_id, algorithm_key)
+
         return {
             "experiment_id": experiment_id,
             "algorithm_key": algorithm_key,
@@ -1077,11 +1138,7 @@ class ResultService:
                 "ate_min": float(ate_min),
                 "ate_max": float(ate_max),
                 "duration_seconds": float(duration),
-                "success_rate": (
-                    float(getattr(algorithm_key, "success_rate", 0.0))
-                    if hasattr(algorithm_key, "success_rate")
-                    else 0.0
-                ),
+                "success_rate": float(getattr(m, "success_rate", 0.0)),
             },
             "metadata": {
                 "coordinate_system": "camera",

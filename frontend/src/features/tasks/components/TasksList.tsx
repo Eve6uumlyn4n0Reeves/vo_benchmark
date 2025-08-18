@@ -8,7 +8,6 @@ import {
   Tooltip,
   Grid,
   Divider,
-  LinearProgress,
   Button,
   Link,
 } from '@mui/material';
@@ -21,7 +20,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { Task } from '@/types/api';
 import { TaskStatusChip } from './TaskStatusChip';
-import { ConfirmDialog } from '@/components/common';
+import { ConfirmDialog, ProgressBar01 } from '@/components/common';
+import { useMonotonicTaskProgress } from '../hooks/useMonotonicTaskProgress';
 
 // =============================================================================
 // TASK CARD
@@ -85,20 +85,15 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onCancel, cancelLoading = fal
         </Box>
 
         {/* Progress */}
-        {task.progress !== undefined && task.status === 'running' && (
+        {(task.progress !== undefined || task.status === 'running' || task.status === 'completed') && (
           <Box mb={2}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="body2" color="text.secondary">
-                进度
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {Math.round(task.progress * 100)}%
-              </Typography>
-            </Box>
-            <LinearProgress 
-              variant="determinate" 
-              value={task.progress * 100} 
-              sx={{ height: 6, borderRadius: 3 }}
+            <Typography variant="body2" color="text.secondary" mb={1}>
+              进度
+            </Typography>
+            <ProgressBar01
+              value01={useMonotonicTaskProgress(task.task_id, task.progress, task.status)}
+              height={6}
+              showLabel={true}
             />
           </Box>
         )}

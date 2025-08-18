@@ -191,7 +191,7 @@ export interface Task {
   status: TaskStatus;
   message: string;
   progress: number;
-  current_step?: string;
+  current_step?: number | string;
   total_steps?: number;
   experiment_id?: string;
   created_at: string;
@@ -230,7 +230,10 @@ export interface MatchingMetrics {
 export interface RansacMetrics {
   avg_iterations: number;
   std_iterations: number;
+  min_iterations: number;
+  max_iterations: number;
   convergence_rate: number;
+  avg_inlier_ratio: number;
   success_rate: number;
   avg_processing_time_ms: number;
 }
@@ -243,6 +246,9 @@ export interface AlgorithmMetricsResponse {
   total_time_s: number;
   fps: number;
   success_rate: number;
+  metrics_schema_version?: string;
+  source_flags?: { match_scores?: 'present'|'absent'; reprojection?: 'present'|'absent' };
+
   total_frames: number;
   successful_frames: number;
   failed_frames: number;
@@ -261,6 +267,14 @@ export interface PRCurveResponse {
   f1_scores: number[];
   max_f1_score: number;
 }
+
+export interface PRCurveComputingResponse {
+  status: 'computing';
+  message: string;
+  algorithm: string;
+}
+
+export type PRCurveApiResponse = PRCurveResponse | PRCurveComputingResponse;
 
 export interface AlgorithmResultResponse {
   algorithm_key: string;
@@ -298,6 +312,14 @@ export interface TrajectoryResponse {
   gt?: Array<Record<string, unknown>>;
   ref?: Array<Record<string, unknown>>;
 }
+
+export interface TrajectoryComputingResponse {
+  status: 'computing';
+  message: string;
+  algorithm: string;
+}
+
+export type TrajectoryApiResponse = TrajectoryResponse | TrajectoryComputingResponse;
 
 // =============================================================================
 // QUERY PARAMETERS

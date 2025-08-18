@@ -38,6 +38,13 @@ sqlalchemy>=2.0.0
 # The project uses in-memory task management and SSE for real-time updates
 # Main storage is file-based, SQLAlchemy is only used for error handling and optional monitoring
 
+# Machine learning for PR curve computation
+scikit-learn>=1.3.0
+
 # Optional: Advanced visualization (uncomment if needed)
 # matplotlib>=3.7.0
 # plotly>=5.15.0
+
+# Optional: Redis for scalable SSE (EVENT_BUS=redis)
+redis>=5.0.0
+

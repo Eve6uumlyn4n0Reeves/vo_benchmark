@@ -55,3 +55,49 @@ artifacts/
 backend/src/data/**
 !backend/src/data/.gitkeep
 !backend/src/data/experiments/.gitkeep
+
+
+# -------------------- Root build outputs (any) --------------------
+dist/
+build/
+out/
+.tmp/
+tmp/
+
+# -------------------- Additional Frontend caches/reports --------------------
+frontend/.parcel-cache/
+frontend/.turbo/
+frontend/.next/
+frontend/.nuxt/
+frontend/playwright-report/
+frontend/test-results/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# -------------------- Additional Backend Python artifacts --------------------
+backend/build/
+backend/dist/
+backend/*.egg-info/
+**/*.egg-info/
+**/*.egg
+backend/.coverage*
+backend/htmlcov/
+**/.coverage*
+**/htmlcov/
+
+# -------------------- Editor/OS temp files (extended) --------------------
+.vs/
+.history/
+.fleet/
+*.swp
+*.swo
+*.tmp
+*~
+~$*
+
+# -------------------- Large archives/bundles (not source) --------------------
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.7z

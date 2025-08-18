@@ -10,8 +10,8 @@ import { measureNetworkRequest } from '@/utils/performance';
 import {
   AlgorithmResultResponseSchema,
   FrameResultsResponseSchema,
-  PRCurveResponseSchema,
-  TrajectoryResponseSchema,
+  PRCurveApiResponseSchema,
+  TrajectoryApiResponseSchema,
   ResultsOverviewSchema,
   ResultsDiagnosticsSchema,
   validateApiResponse,
@@ -19,8 +19,8 @@ import {
 import type {
   AlgorithmResultResponse,
   FrameResultsResponse,
-  PRCurveResponse,
-  TrajectoryResponse,
+  PRCurveApiResponse,
+  TrajectoryApiResponse,
   FrameResultsParams,
   TrajectoryParams,
   ExportParams,
@@ -91,9 +91,9 @@ export const getFrameResults = async (
 export const getPRCurve = async (
   experimentId: string,
   algorithmKey: string
-): Promise<PRCurveResponse> => {
+): Promise<PRCurveApiResponse> => {
   const response = await apiRequest.get(`/results/${experimentId}/${algorithmKey}/pr-curve`);
-  return validateApiResponse(PRCurveResponseSchema, response.data);
+  return validateApiResponse(PRCurveApiResponseSchema, response.data);
 };
 
 /**
@@ -104,12 +104,12 @@ export const getTrajectory = async (
   experimentId: string,
   algorithmKey: string,
   params: TrajectoryParams = {}
-): Promise<TrajectoryResponse> => {
+): Promise<TrajectoryApiResponse> => {
   return measureNetworkRequest(
     `getTrajectory-${algorithmKey}`,
     async () => {
       const response = await apiRequest.get(`/results/${experimentId}/${algorithmKey}/trajectory`, { params });
-      const data = validateApiResponse(TrajectoryResponseSchema, response.data);
+      const data = validateApiResponse(TrajectoryApiResponseSchema, response.data);
 
       // 记录响应大小和压缩信息
       const headers = response.headers;
@@ -237,16 +237,35 @@ export const useFrameResults = (
 };
 
 /**
- * Hook for PR curve data
+ * Hook for PR curve data with enhanced computing state handling
  */
 export const usePRCurve = (experimentId: string, algorithmKey: string) => {
   return useQuery({
     queryKey: queryKeys.resultsPrCurve(experimentId, algorithmKey),
-    queryFn: () => getPRCurve(experimentId, algorithmKey),
+    queryFn: async () => {
+      const result = await getPRCurve(experimentId, algorithmKey);
+
+      // 检查是否是计算中状态
+      if (result && typeof result === 'object' && 'status' in result && result.status === 'computing') {
+        // 抛出特殊错误，触发重试
+        const error = new Error('PR曲线正在计算中') as any;
+        error.isComputing = true;
+        error.retryAfter = 3000; // 3秒后重试
+        throw error;
+      }
+
+      return result;
+    },
     staleTime: 10 * 60 * 1000, // 10 minutes - PR curves don't change
     gcTime: 30 * 60 * 1000, // 30 minutes
     enabled: !!(experimentId && algorithmKey),
-    retry: (failureCount, error) => {
+    retry: (failureCount, error: any) => {
+      // 如果是计算中状态，继续重试（最多10次）
+      if (error?.isComputing && failureCount < 10) {
+        return true;
+      }
+
+      // 其他错误的重试逻辑
       if (error instanceof Error && 'status' in error) {
         const status = (error as any).status;
         if (status >= 400 && status < 500) {
@@ -254,6 +273,14 @@ export const usePRCurve = (experimentId: string, algorithmKey: string) => {
         }
       }
       return failureCount < 2;
+    },
+    retryDelay: (attemptIndex, error: any) => {
+      // 如果是计算中状态，使用较短的重试间隔
+      if (error?.isComputing) {
+        return error.retryAfter || 3000;
+      }
+      // 其他错误使用指数退避
+      return Math.min(1000 * 2 ** attemptIndex, 30000);
     },
   });
 };
@@ -268,11 +295,30 @@ export const useTrajectory = (
 ) => {
   return useQuery({
     queryKey: queryKeys.resultsTrajectory(experimentId, algorithmKey, params),
-    queryFn: () => getTrajectory(experimentId, algorithmKey, params),
+    queryFn: async () => {
+      const result = await getTrajectory(experimentId, algorithmKey, params);
+
+      // 检查是否是计算中状态
+      if (result && typeof result === 'object' && 'status' in result && result.status === 'computing') {
+        // 抛出特殊错误，触发重试
+        const error = new Error('轨迹正在计算中') as any;
+        error.isComputing = true;
+        error.retryAfter = 3000; // 3秒后重试
+        throw error;
+      }
+
+      return result;
+    },
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     enabled: !!(experimentId && algorithmKey),
-    retry: (failureCount, error) => {
+    retry: (failureCount, error: any) => {
+      // 如果是计算中状态，继续重试（最多10次）
+      if (error?.isComputing && failureCount < 10) {
+        return true;
+      }
+
+      // 其他错误的重试逻辑
       if (error instanceof Error && 'status' in error) {
         const status = (error as any).status;
         if (status >= 400 && status < 500) {
@@ -280,6 +326,14 @@ export const useTrajectory = (
         }
       }
       return failureCount < 2;
+    },
+    retryDelay: (attemptIndex, error: any) => {
+      // 如果是计算中状态，使用较短的重试间隔
+      if (error?.isComputing) {
+        return error.retryAfter || 3000;
+      }
+      // 其他错误使用指数退避
+      return Math.min(1000 * 2 ** attemptIndex, 30000);
     },
   });
 };

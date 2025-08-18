@@ -117,22 +117,29 @@ class FrameProcessor:
                         return (int(max(ys) + 1), int(max(xs) + 1))
                     shape1 = _estimate_shape(self._prev_features.keypoints)
                     shape2 = _estimate_shape(current_features.keypoints)
-                    # 从统一配置读取后处理参数
+                    # 从统一配置读取后处理参数；允许完全禁用
                     try:
                         from src.config.manager import get_config
                         pf = get_config().experiment.post_filter
-                        gms_params = pf.get("gms", {}) if pf.get("enabled", True) else {}
+                        pf_enabled = bool(pf.get("enabled", True))
+                        gms_params = pf.get("gms", {})
                     except Exception:
+                        pf_enabled = True
                         gms_params = {"with_rotation": False, "with_scale": False, "threshold_factor": 6}
-                    matches = apply_gms_filter(
-                        shape1, shape2,
-                        self._prev_features.keypoints,
-                        current_features.keypoints,
-                        matches,
-                        with_rotation=bool(gms_params.get("with_rotation", False)),
-                        with_scale=bool(gms_params.get("with_scale", False)),
-                        threshold_factor=int(gms_params.get("threshold_factor", 6)),
-                    )
+
+                    if pf_enabled:
+                        matches = apply_gms_filter(
+                            shape1, shape2,
+                            self._prev_features.keypoints,
+                            current_features.keypoints,
+                            matches,
+                            with_rotation=bool(gms_params.get("with_rotation", False)),
+                            with_scale=bool(gms_params.get("with_scale", False)),
+                            threshold_factor=int(gms_params.get("threshold_factor", 6)),
+                        )
+                    else:
+                        # 完全禁用后处理时，保留原始匹配，不触发GMS能力检测
+                        pass
             except Exception as _e:
                 logger.debug(f"匹配后处理跳过: {_e}")
 

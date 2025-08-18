@@ -98,6 +98,21 @@ export const useSSE = (url: string, options: UseSSEOptions = {}) => {
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
+      const dispatchMessage = (evtType: string, rawData: string) => {
+        try {
+          const data = JSON.parse(rawData);
+          const message: SSEMessage = {
+            type: evtType || 'message',
+            data,
+            timestamp: Date.now(),
+          };
+          setState(prev => ({ ...prev, lastMessage: message }));
+          onMessage?.(message);
+        } catch (error) {
+          console.error('Failed to parse SSE message:', error);
+        }
+      };
+
       eventSource.onopen = () => {
         reconnectAttemptsRef.current = 0;
         setState(prev => ({
@@ -110,25 +125,30 @@ export const useSSE = (url: string, options: UseSSEOptions = {}) => {
         onConnect?.();
       };
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const message: SSEMessage = {
-            type: event.type || 'message',
-            data,
-            timestamp: Date.now(),
-          };
+      // 1) 默认 message 事件（后端未设置 event: 时）
+      eventSource.onmessage = (event) => dispatchMessage(event.type || 'message', (event as MessageEvent).data as any);
 
-          setState(prev => ({ ...prev, lastMessage: message }));
-          onMessage?.(message);
-        } catch (error) {
-          console.error('Failed to parse SSE message:', error);
-        }
-      };
+      // 2) 已知的命名事件（与后端对齐）
+      const namedEvents = [
+        'heartbeat',
+        'task_updated',
+        'task_log',
+        'experiment_started',
+        'experiment_progress',
+        'experiment_completed',
+        'experiment_failed',
+        'experiment_deleted',
+      ];
+      namedEvents.forEach((evt) => {
+        eventSource.addEventListener(evt, (e: Event) => {
+          const me = e as MessageEvent;
+          dispatchMessage(evt, me.data as any);
+        });
+      });
 
       eventSource.onerror = (error) => {
         console.error('SSE connection error:', error);
-        
+
         setState(prev => ({
           ...prev,
           isConnected: false,

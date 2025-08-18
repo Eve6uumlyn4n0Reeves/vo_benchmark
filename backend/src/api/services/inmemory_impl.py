@@ -91,7 +91,8 @@ class InMemoryTaskBackend(ITaskBackend):
     def create_task(self, description: str, experiment_id: Optional[str] = None) -> TaskResponse:
         with self._lock:
             task_id = str(uuid.uuid4())
-            now = datetime.now()
+            from datetime import timezone
+            now = datetime.now(timezone.utc)
             task = TaskResponse(
                 task_id=task_id,
                 status=TaskStatus.PENDING,
@@ -122,9 +123,10 @@ class InMemoryTaskBackend(ITaskBackend):
             else:
                 data = task.dict()
             data.update(kwargs)
-            data["updated_at"] = datetime.now()
+            from datetime import timezone
+            data["updated_at"] = datetime.now(timezone.utc)
             if kwargs.get("status") in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
-                data["completed_at"] = datetime.now()
+                data["completed_at"] = datetime.now(timezone.utc)
             updated = TaskResponse(**data)
             self._tasks[task_id] = updated
             return updated
@@ -156,7 +158,8 @@ class InMemoryTaskBackend(ITaskBackend):
 
     def cleanup_completed_tasks(self, max_age_hours: int = 24) -> int:
         with self._lock:
-            now = datetime.now()
+            from datetime import timezone
+            now = datetime.now(timezone.utc)
             to_remove: List[str] = []
             for task_id, task in self._tasks.items():
                 if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED] and task.completed_at and (now - task.completed_at).total_seconds() > max_age_hours * 3600:
@@ -167,7 +170,8 @@ class InMemoryTaskBackend(ITaskBackend):
 
     def get_task_history(self, experiment_id: str, hours: int = 24) -> List[Dict[str, Any]]:
         with self._lock:
-            now = datetime.now()
+            from datetime import timezone
+            now = datetime.now(timezone.utc)
             cutoff = now.timestamp() - hours * 3600
             history: List[Dict[str, Any]] = []
             for task_id, task in self._tasks.items():
@@ -207,7 +211,7 @@ class InMemoryTaskBackend(ITaskBackend):
                         "completed_tasks": 1 if task.status in [TaskStatus.COMPLETED] else 0,
                         "failed_tasks": 1 if task.status in [TaskStatus.FAILED] else 0,
                         "average_processing_speed": (task.progress / max((task.completed_at - task.created_at).total_seconds(), 1e-6)) if task.completed_at else 0.0,
-                        "total_processing_time": (task.completed_at - task.created_at).total_seconds() if task.completed_at else (datetime.now() - task.created_at).total_seconds(),
+                        "total_processing_time": (task.completed_at - task.created_at).total_seconds() if task.completed_at else ((datetime.now(timezone.utc) - task.created_at).total_seconds()),
                         "started_at": task.created_at.isoformat(),
                         "estimated_completion": None,
                     }
@@ -225,7 +229,8 @@ class InMemoryTaskBackend(ITaskBackend):
         with self._lock:
             if task_id not in self._task_logs:
                 self._task_logs[task_id] = []
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            from datetime import timezone
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             formatted_log = f"[{timestamp}] {log_line}"
             self._task_logs[task_id].append(formatted_log)
 

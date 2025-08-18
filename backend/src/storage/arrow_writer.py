@@ -17,6 +17,30 @@ except ImportError:
     ARROW_AVAILABLE = False
 
 
+def _decode_metadata(meta: Any) -> Dict[str, str]:
+    """将 Arrow schema.metadata 解码为 str->str 字典
+    - PyArrow 通常返回 bytes->bytes；测试与前端期望 str 键值
+    - 安全降级：无法解码时转为 str
+    """
+    if not meta:
+        return {}
+    decoded: Dict[str, str] = {}
+    try:
+        items = meta.items() if hasattr(meta, "items") else meta
+        for k, v in items:
+            key = k.decode("utf-8", errors="replace") if isinstance(k, (bytes, bytearray)) else str(k)
+            val = v.decode("utf-8", errors="replace") if isinstance(v, (bytes, bytearray)) else str(v)
+            decoded[key] = val
+    except Exception:
+        # 最后退路
+        try:
+            for k, v in dict(meta).items():
+                decoded[str(k)] = str(v)
+        except Exception:
+            return {}
+    return decoded
+
+
 class ArrowWriter:
     """Apache Arrow 列式数据写入器
     
@@ -66,28 +90,38 @@ class ArrowWriter:
                 ref_cols = self._extract_trajectory_columns(reference_trajectory, prefix="ref_")
                 columns.update(ref_cols)
             
+            # 对齐可选轨迹长度到估计轨迹长度（不足处以 NaN 填充）
+            est_len = len(columns.get('x', []))
+            def pad_to(values: List[float], target: int) -> List[Optional[float]]:
+                arr = list(values)
+                if len(arr) < target:
+                    arr.extend([float('nan')] * (target - len(arr)))
+                return arr
+
             # 创建Arrow表
             arrays = {}
             for col_name, values in columns.items():
+                vals = values
+                if col_name.startswith('gt_') or col_name.startswith('ref_'):
+                    vals = pad_to(values, est_len)
                 if col_name in ['frame_id']:
-                    arrays[col_name] = pa.array(values, type=pa.uint32())
+                    arrays[col_name] = pa.array(vals, type=pa.uint32())
                 elif col_name.endswith('_t') or col_name == 't':
-                    arrays[col_name] = pa.array(values, type=pa.float64())
+                    arrays[col_name] = pa.array(vals, type=pa.float64())
                 else:
-                    arrays[col_name] = pa.array(values, type=pa.float32())
-            
+                    arrays[col_name] = pa.array(vals, type=pa.float32())
+
             table = pa.Table.from_pydict(arrays)
-            
-            # 添加元数据到schema
+
+            # 添加元数据到schema（确保键值为 str，并且在读取阶段可还原为 str）
             if metadata:
-                schema_metadata = {k: str(v) for k, v in metadata.items()}
+                schema_metadata = {str(k): str(v) for k, v in metadata.items()}
                 table = table.replace_schema_metadata(schema_metadata)
-            
-            # 写入文件
-            compression = 'zstd' if self.enable_compression else None
+
+            # 写入文件（使用 schema 以保留元数据）
             with ipc.new_file(path, table.schema) as sink:
                 sink.write(table)
-            
+
             logger.info(f"Arrow轨迹数据已写入: {path} ({len(estimated_trajectory)} 点)")
             
         except Exception as e:
@@ -142,23 +176,35 @@ class ArrowWriter:
             if raw_f1_scores:
                 columns['raw_f1'] = raw_f1_scores
             
-            # 创建Arrow表
+            # 确保所有列长度一致（以 precisions 长度为主），不足处以 NaN 填充
+            target = len(precisions)
+            def pad(values: Optional[List[float]]) -> Optional[List[float]]:
+                if values is None:
+                    return None
+                arr = list(values)
+                if len(arr) < target:
+                    arr.extend([float('nan')] * (target - len(arr)))
+                elif len(arr) > target:
+                    arr = arr[:target]
+                return arr
+
+            # 创建Arrow表（使用 float64 以避免精度丢失导致的严格相等断言失败）
             arrays = {}
             for col_name, values in columns.items():
-                arrays[col_name] = pa.array(values, type=pa.float32())
-            
+                padded = pad(values)
+                arrays[col_name] = pa.array(padded, type=pa.float64())
+
             table = pa.Table.from_pydict(arrays)
-            
-            # 添加元数据
+
+            # 添加元数据（确保键值为 str，并且在读取阶段可还原为 str）
             if metadata:
-                schema_metadata = {k: str(v) for k, v in metadata.items()}
+                schema_metadata = {str(k): str(v) for k, v in metadata.items()}
                 table = table.replace_schema_metadata(schema_metadata)
-            
-            # 写入文件
-            compression = 'zstd' if self.enable_compression else None
+
+            # 写入文件（使用 schema 以保留元数据）
             with ipc.new_file(path, table.schema) as sink:
                 sink.write(table)
-            
+
             logger.info(f"Arrow PR曲线数据已写入: {path} ({len(precisions)} 点)")
             
         except Exception as e:
@@ -251,9 +297,11 @@ class ArrowReader:
                 "estimated_trajectory": [],
                 "groundtruth_trajectory": [],
                 "reference_trajectory": [],
-                "metadata": dict(table.schema.metadata) if table.schema.metadata else {}
+                "metadata": _decode_metadata(table.schema.metadata)
+                if table.schema.metadata
+                else {}
             }
-            
+
             # 估计轨迹
             if all(col in table.column_names for col in ['x', 'y', 'z', 't']):
                 x_vals = table.column('x').to_pylist()
@@ -311,19 +359,23 @@ class ArrowReader:
                 "precisions": table.column('precision').to_pylist(),
                 "recalls": table.column('recall').to_pylist(),
                 "thresholds": table.column('threshold').to_pylist(),
-                "metadata": dict(table.schema.metadata) if table.schema.metadata else {}
+                "metadata": _decode_metadata(table.schema.metadata)
+                if table.schema.metadata
+                else {}
             }
-            
+
             # 可选列
             if 'f1' in table.column_names:
                 result["f1_scores"] = table.column('f1').to_pylist()
             
             if 'raw_precision' in table.column_names:
                 result["raw_precisions"] = table.column('raw_precision').to_pylist()
+            if 'raw_recall' in table.column_names:
                 result["raw_recalls"] = table.column('raw_recall').to_pylist()
+            if 'raw_threshold' in table.column_names:
                 result["raw_thresholds"] = table.column('raw_threshold').to_pylist()
-                if 'raw_f1' in table.column_names:
-                    result["raw_f1_scores"] = table.column('raw_f1').to_pylist()
+            if 'raw_f1' in table.column_names:
+                result["raw_f1_scores"] = table.column('raw_f1').to_pylist()
             
             return result
             

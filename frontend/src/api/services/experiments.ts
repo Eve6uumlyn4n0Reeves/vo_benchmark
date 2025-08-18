@@ -1,6 +1,9 @@
 /**
  * Experiments API service
  * Handles experiment management endpoints with runtime validation
+ *
+ * 注意：仅支持 /experiments-doc/ 前缀路径，避免使用 legacy /experiments/
+ * 所有实验相关功能统一使用文档化的 API 端点
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

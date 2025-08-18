@@ -51,7 +51,9 @@ def test_experiment_lifecycle_minimal(tmp_path: Path):
     exp_id = task.experiment_id
     exp = svc.get_experiment(exp_id)
     assert exp.experiment_id == exp_id
-    assert exp.status in {TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    # 实验状态使用 ExperimentStatus（大写值），与任务状态不同
+    from src.models.types import ExperimentStatus
+    assert exp.status in {"CREATED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"}
 
     # 删除（异步可能未完成，但接口应具备幂等删除能力）
     svc.delete_experiment(exp_id)

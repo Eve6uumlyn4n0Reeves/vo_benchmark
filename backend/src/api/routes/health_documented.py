@@ -235,8 +235,8 @@ _start_time = time.time()
 def get_system_metrics():
     """Get current system resource usage metrics."""
     try:
-        # CPU usage (average over 1 second)
-        cpu_percent = psutil.cpu_percent(interval=1)
+        # CPU usage (non-blocking, may return 0.0 on first call)
+        cpu_percent = psutil.cpu_percent(interval=None)
 
         # Memory usage
         memory = psutil.virtual_memory()
@@ -343,7 +343,6 @@ def check_dependencies():
             {"name": "flask", "status": "unavailable", "error_message": str(e)}
         )
 
-    return dependencies
     # Check OpenCV capabilities (contrib/GMS/USAC)
     try:
         import cv2
@@ -374,6 +373,8 @@ def check_dependencies():
             'status': 'degraded',
             'error_message': str(e),
         })
+
+    return dependencies
 
 
 
@@ -466,51 +467,39 @@ class DetailedHealth(Resource):
             else:
                 status = "healthy"
 
-            # Get service statistics (real data)
+            # Get service statistics (lightweight, non-blocking)
             try:
                 from src.api.services.task import task_service
-                from src.api.services.experiment import ExperimentService
 
-                # 获取真实的任务统计
+                # 获取任务统计（内存操作，快速）
                 active_tasks = task_service.get_active_tasks()
                 queue_size = len(active_tasks)
 
-                # 获取实验统计（使用缓存优化性能）
+                # 实验统计使用缓存，避免阻塞健康检查
                 def compute_experiment_stats():
                     try:
-                        # 使用全局实验服务实例，避免重复初始化
-                        from src.api.services.experiment import experiment_service
-                        result = experiment_service.list_experiments(1, 50)  # 限制数量提升性能
+                        # 快速检查：只统计内存中的任务相关实验
+                        all_tasks = task_service.list_tasks()
+                        experiment_ids = set()
+                        active_experiment_ids = set()
 
-                        # 处理可能的分页响应格式
-                        if isinstance(result, dict) and "experiments" in result:
-                            experiments = result["experiments"]
-                            total_experiments = result.get("total", len(experiments))
-                        elif isinstance(result, list):
-                            experiments = result
-                            total_experiments = len(experiments)
-                        else:
-                            experiments = []
-                            total_experiments = 0
+                        for task in all_tasks:
+                            if task.experiment_id:
+                                experiment_ids.add(task.experiment_id)
+                                if task.status.value in ["pending", "running"]:
+                                    active_experiment_ids.add(task.experiment_id)
 
-                        active_experiments = len(
-                            [
-                                exp
-                                for exp in experiments
-                                if hasattr(exp, 'status') and exp.status in ["RUNNING", "PENDING"]
-                            ]
-                        )
-                        return total_experiments, active_experiments
+                        return len(experiment_ids), len(active_experiment_ids)
                     except Exception as e:
-                        logger.warning(f"获取实验统计失败: {e}")
+                        logger.debug(f"获取实验统计失败: {e}")
                         return 0, 0
 
                 total_experiments, active_experiments = get_cached_or_compute(
-                    "experiment_stats", compute_experiment_stats, ttl=30
+                    "experiment_stats", compute_experiment_stats, ttl=60
                 )
 
             except Exception as e:
-                logger.warning(f"获取服务统计失败: {e}")
+                logger.debug(f"获取服务统计失败: {e}")
                 active_experiments = 0
                 total_experiments = 0
                 queue_size = 0
